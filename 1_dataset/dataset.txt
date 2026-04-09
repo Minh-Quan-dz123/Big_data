@@ -51,7 +51,7 @@ Thông tin của từng dòng sản phẩm trong các đơn hàng Order_ite
 •Rating 	     : số sao/điểm đánh giá của khách dành cho sản phẩm (ví dụ: 2, 4, 5) 
 •Review_text         : nội dung nhận xét / bình luận của người dùng về sản phẩm (ví dụ: "Color was different from images.", "Highly recommend this brand.") 
 •Review_date         : thời gian người dùng thực hiện đánh giá (ví dụ: 2025-10-14T12:03:56.749446, 2024-10-09T08:04:50.171793) 
-	Dữ liệu về review kết hợp với dữ liệu đơn hàng của user sẽ giúp phân tích xem khách hàng này có yêu thích sản phẩm này không, từ đó ảnh hưởng trực tiếp đến việc gợi ý nhãn hàng cho khách hàng trong tương lai
+Dữ liệu về review kết hợp với dữ liệu đơn hàng của user sẽ giúp phân tích xem khách hàng này có yêu thích sản phẩm này không, từ đó ảnh hưởng trực tiếp đến việc gợi ý nhãn hàng cho khách hàng trong tương lai
 
 5, Dữ liệu về khách hàng users.csv
 •User_id 	     : id của người dùng (ví dụ: U000001, U000002)
@@ -59,7 +59,7 @@ Thông tin của từng dòng sản phẩm trong các đơn hàng Order_ite
 •Email	  	     : địa chỉ email của người dùng (ví dụ: donaldgarcia@example.net,...)
 •Gender 	     : giới tính của người dùng (ví dụ: Male, Female, Other)
 •Signup_date	     : ngày người dùng đăng ký tài khoản trên hệ thống (ví dụ: 2025-03-13, 2024-03-05)
-	Với quy mô / giới hạn của đồ án này thì dữ liệu về user chưa được khai thác triệt để, hiện tại mục đích chính chỉ để cung cấp thêm thông tin chưa dùng để phân tích gì thêm
+Với quy mô / giới hạn của đồ án này thì dữ liệu về user chưa được khai thác triệt để, hiện tại mục đích chính chỉ để cung cấp thêm thông tin chưa dùng để phân tích gì thêm
 
 6, Dữ liệu về nhu cầu sản phẩm đang tìm kiếm của khách hàng tại thời điểm hiện tại trên hệ thống search_logs.csv
 •Search_id	     : id của mỗi lần tìm kiếm trên hệ thống (ví dụ: S000001, S000002)
@@ -71,4 +71,4 @@ Thông tin của từng dòng sản phẩm trong các đơn hàng Order_ite
 •Max_price 	    : mức giá cao nhất mà người dùng lọc khi tìm kiếm (ví dụ: 500000)
 •Sort_by	    : tiêu chí sắp xếp kết quả tìm kiếm (ví dụ: price_asc, rating_desc, newest)
 •Search_time 	    : thời gian người dùng thực hiện thao tác tìm kiếm (ví dụ: 2025-04-09 20:15:32)
-Dữ liệu này sẽ được dùng trực tiếp để phân tích nhu cầu hiện tại của khách hàng, đồng thời nó cũng được lưu trữ để phục vụ việc phân tích nhu cầu khách hàng gần đây
+Dữ liệu này sẽ được dùng trực tiếp để phân tích nhu cầu hiện tại của khách hàng, đồng thời nó cũng được lưu trữ̃để phục vụ việc phân tích nhu cầu khách hàng gần đây
