@@ -1,0 +1,74 @@
+2.3.1.	Raw Data
+Là nơi lưu các dữ liệu gốc được lấy từ nguồn bên ngoài, cụ thể trong đồ án này nhóm sử dụng tập dataset từ kaggle web. Các bảng dữ liệu được thu thập/tải về làm dataset như sau
+
+//// -------------- ko viết hoa chữ đầu ----------------////////
+1, Dữ liệu về tao thác của khách hàng event – events.csv
+•Event_id    	      : id của event (ví dụ: E0000123)
+•User_id       	      : id của người tiêu dùng (ví dụ: U001922)
+•Product_id 	      : id của sản phẩm, (ví dụ: như P001233, P012931)
+•Event_type 	      : Loại của order này (ví dụ: cart – thêm vào giỏ hàng , view – xem, wishlist – thêm vào danh sách yêu thích, purchase – mua hàng)
+•Event_timestamp      : thời gian order này được tạo (ví dụ: 2025-07-08T14:28:55.893919)
+Ngoài ra với Data lake raw tập dữ liệu thừa các trường dữ liệu khác cũng không sao
+Dữ liệu này sẽ được sử dụng trong speed layer – xử lý các nhu cầu hiện tại của khác
+
+2, Dữ liệu về đơn hàng, gồm hai bảng dữ liệu
+Dữ liệu về đơn hàng orders.csv
+•Order_id    	      : id của đơn hàng (ví dụ: O0000120)
+•User_id       	      : id của người tiêu dùng (ví dụ: U001922)
+•Order_data 	      : thời điểm tạo đơn hàng này (ví dụ: 025-09-09T14:52:37.292731)
+•Order_status 	      : Trạng thái của đơn hàng (ví dụ: processing – đang xử lý , completed – đã hoàn thành, cancelled – đã bị hủy, returned – đã hoàn trả, shipped – hàng đang trên đường giao tới khác)
+•Total_amount         : tổng tiền tính theo vnđ (ví dụ: 1293.12)
+
+Thông tin của từng dòng sản phẩm trong các đơn hàng Order_item.csv
+•Order_item_id        : id của từng dòng sản phẩm đó (ví dụ: I0000001)
+•Order_id             : id của đơn hàng (ví dụ: O00192222)
+•Product_id 	      : id của sản phẩm (ví dụ: như P001233, P012931)
+•User_id    	      : id của người tiêu dùng (ví dụ: U001922)
+•Quantity             : số lượng sản phẩm (ví dụ: 3)
+•Item_price 	      : giá của 1 sản phẩm (ví dụ: 12.000)
+•Item_total 	      : tổng giá của n sản phẩm (ví dụ: 36.000)
+
+Dữ liệu về đơn hàng của user sẽ được dùng để phân tích thói quen tiêu dùng, sản phẩm hot trend, mối quan tâm gần đây của khách hàng và cuối cùng là được dùng để phân loại khách hàng
+
+
+3, Dữ liệu về sản phẩm products.csv
+•Product_id 	     : id của sản phẩm (ví dụ: P000001, P000002) 
+•Product_name        : tên của sản phẩm (ví dụ: Astra Be, NeoTech Someone) 
+•Category 	     : danh mục / loại sản phẩm (ví dụ: Clothing, Groceries, Sports, Electronics) 
+•Brand		     : thương hiệu của sản phẩm (ví dụ: Astra, NeoTech, Acme, Nimbus) 
+•Price 		     : giá của sản phẩm (ví dụ: 157.89, 21.46, 265.37, 541.41) 
+•Rating 	     : điểm đánh giá trung bình của sản phẩm (ví dụ: 4.08, 3.87, 3.46, 4.14)
+•//////////////////// thiếu mô tả sản phẩm ////////////////////////////
+
+Dữ liệu về sản phẩm và dữ liệu về các item của đơn hàng sẽ được dùng để phân tích thói quen của khách hay mua sản phẩm của các nhãn hàng nào
+
+
+4, Dữ liệu về các đánh giá của user về các sản phẩm review.csv
+•Review_id 	     : id của đánh giá (ví dụ: R00000528, R00005792) 
+•Order_id 	     : id của đơn hàng có chứa sản phẩm được đánh giá (ví dụ: O00000237, O00002627) 
+•Product_id 	     : id của sản phẩm được đánh giá (ví dụ: P001326, P000329) 
+•User_id	     : id của người dùng thực hiện đánh giá (ví dụ: U001094, U001858) 
+•Rating 	     : số sao/điểm đánh giá của khách dành cho sản phẩm (ví dụ: 2, 4, 5) 
+•Review_text         : nội dung nhận xét / bình luận của người dùng về sản phẩm (ví dụ: "Color was different from images.", "Highly recommend this brand.") 
+•Review_date         : thời gian người dùng thực hiện đánh giá (ví dụ: 2025-10-14T12:03:56.749446, 2024-10-09T08:04:50.171793) 
+Dữ liệu về review kết hợp với dữ liệu đơn hàng của user sẽ giúp phân tích xem khách hàng này có yêu thích sản phẩm này không, từ đó ảnh hưởng trực tiếp đến việc gợi ý nhãn hàng cho khách hàng trong tương lai
+
+5, Dữ liệu về khách hàng users.csv
+•User_id 	     : id của người dùng (ví dụ: U000001, U000002)
+•Name 		     : họ và tên của người dùng (ví dụ: Angel Hill, Jesse Guzman)
+•Email	  	     : địa chỉ email của người dùng (ví dụ: donaldgarcia@example.net,...)
+•Gender 	     : giới tính của người dùng (ví dụ: Male, Female, Other)
+•Signup_date	     : ngày người dùng đăng ký tài khoản trên hệ thống (ví dụ: 2025-03-13, 2024-03-05)
+Với quy mô / giới hạn của đồ án này thì dữ liệu về user chưa được khai thác triệt để, hiện tại mục đích chính chỉ để cung cấp thêm thông tin chưa dùng để phân tích gì thêm
+
+6, Dữ liệu về nhu cầu sản phẩm đang tìm kiếm của khách hàng tại thời điểm hiện tại trên hệ thống search_logs.csv
+•Search_id	     : id của mỗi lần tìm kiếm trên hệ thống (ví dụ: S000001, S000002)
+•User_id 	     : id của người dùng (ví dụ: U000001, U000002)
+•Session_id 	     : id của phiên truy cập/phiên làm việc của người dùng trên hệ thống (ví dụ: SE000123, SE000456)
+•Search_keyword: từ khóa mà người dùng nhập vào ô tìm kiếm (ví dụ: "áo hoodie nam", "tai nghe bluetooth")
+•Category_filter  : danh mục sản phẩm mà người dùng lọc khi tìm kiếm (ví dụ: Clothing, Electronics)
+•Min_price 	    : mức giá thấp nhất mà người dùng lọc khi tìm kiếm (ví dụ: 100000)
+•Max_price 	    : mức giá cao nhất mà người dùng lọc khi tìm kiếm (ví dụ: 500000)
+•Sort_by	    : tiêu chí sắp xếp kết quả tìm kiếm (ví dụ: price_asc, rating_desc, newest)
+•Search_time 	    : thời gian người dùng thực hiện thao tác tìm kiếm (ví dụ: 2025-04-09 20:15:32)
+Dữ liệu này sẽ được dùng trực tiếp để phân tích nhu cầu hiện tại của khách hàng, đồng thời nó cũng được lưu trữ̃để phục vụ việc phân tích nhu cầu khách hàng gần đây
