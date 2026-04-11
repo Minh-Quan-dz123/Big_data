@@ -1,4 +1,4 @@
-order_item_id,order_id,product_id,user_id,quantity,item_price,item_total
+rder_item_id,order_id,product_id,user_id,quantity,item_price,item_total
 I00000001,O00000001,P001758,U009310,2,8.07,16.14
 I00000002,O00000001,P001119,U009310,1,74.08,74.08
 I00000003,O00000001,P001794,U009310,1,576.97,576.97

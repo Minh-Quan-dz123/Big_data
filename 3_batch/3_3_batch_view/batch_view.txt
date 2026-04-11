@@ -5,7 +5,7 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
    • User_id           : id của người dùng (ví dụ: U001, U002)
    • Segment_id        : id của phân khúc khách hàng (ví dụ: S01, S03)
    • Segment_name      : tên phân khúc mà người dùng thuộc về (ví dụ: Frequent Buyer, Low Purchase, Discount Hunter, New User)
-   • Assigned_date     : ngày hệ thống gán người dùng vào phân khúc (ví dụ: 2026-04-09T08:04:50)
+   • Assigned_date     : ngày hệ thống gán người dùng vào phân khúc  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
 
 2. Bảng user_consumption_profile – bản mô tả hành vi mua sắm / thói quen tiêu dùng:
    • User_id           : id của người dùng (ví dụ: U001, U002)
@@ -19,7 +19,7 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
    • View_growth       : mức tăng trưởng lượt xem (ví dụ: 3.8)
    • Order_growth      : mức tăng trưởng số lượng đơn hàng (ví dụ: 4.1)
    • Trend_window      : cửa sổ thời gian tính xu hướng (ví dụ: 7d, 30d)
-   • Trend_date        : ngày hệ thống ghi nhận & cập nhật xu hướng (ví dụ: 2026-04-09T08:04:50)
+   • Trend_date        : ngày hệ thống ghi nhận & cập nhật xu hướng  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
 
 4. Product_Similarity – danh sách sản phẩm tương tự có thể thay thế cho nhau:
    • Product_id_1      : id sản phẩm gốc (ví dụ: P001)
@@ -30,7 +30,7 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
        - collaborative  : dựa vào hành vi mua cùng/quan tâm cùng
        - hybrid         : kết hợp cả hai
    • Category_match    : cùng danh mục hay không (true/false)
-   • Computed_date     : ngày tính toán tương đồng (ví dụ: 2026-04-09T08:04:50)
+   • Computed_date     : ngày tính toán tương đồng  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
 
 5. Product_complementary – sản phẩm đi kèm với nhau:
    • Product_id_1      : id sản phẩm gốc (ví dụ: P000001)
@@ -43,7 +43,7 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
    • Confidence       : độ tin cậy = Co_purchase_count / order(A) (ví dụ: 0.41, 0.67)
    • Category_cross_sell : có khác danh mục hay không (TRUE / FALSE)
    • Complementary_score : điểm đánh giá mức độ bổ trợ (ví dụ: 0.82, 0.91)
-   • Computed_date    : ngày tính toán (ví dụ: 2026-04-09T01:30:00)
+   • Computed_date    : ngày tính toán  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
 
 6. user_recommendations_batch – kết luận các sản phẩm gợi ý cho người dùng:
    • User_id            : id người dùng (ví dụ: U001922)
@@ -51,4 +51,4 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
    • Recommendation_score : điểm gợi ý (ví dụ: 0.87, 0.95)
    • Recommendation_type  : loại gợi ý (content_based, collaborative, hybrid)
    • Reason_tag          : lý do hoặc nhãn giải thích (ví dụ: bought_together, similar_category)
-   • Computed_date       : ngày tính toán gợi ý (ví dụ: 2026-04-09T01:30:00)
+   • Computed_date       : ngày tính toán gợi ý  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
