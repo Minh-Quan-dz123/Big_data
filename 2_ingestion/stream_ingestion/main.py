@@ -48,7 +48,27 @@ def clean_record(record):
                 "city": ""
             }
     """
-    return 
+    if not isinstance(record, dict):
+        return {}
+    
+    cleaned={}
+    
+    for key, value in record.items():
+        
+        #normalize key
+        new_key=key.strip().lower()
+        
+        #handle null value
+        if value is None:
+            cleaned[new_key]=""
+            continue
+        
+        #string clean
+        if(isinstance(value, str)):
+            cleaned[new_key]=value.strip().lower()
+        else:
+            cleaned[new_key]=value
+    return cleaned
 
 
 #----- TODO: 3 tạo producer-----
