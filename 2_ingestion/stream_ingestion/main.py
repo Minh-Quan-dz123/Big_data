@@ -5,20 +5,29 @@ import subprocess
 import json
 
 # Kafka
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer, KafkaError, KafkaException
 
 # PyArrow
 import pyarrow as pa
 from pyarrow import avro as pavro
 
+#thu vien
+#pip install confluent-kafka
 
 #----- TODO: 1 hàm tạo kafka consumer-----
 def create_consumer():
     """
     tạo consumer để đọc dữ liệu từ fake_realtime.py từ topic ABC1
     """
-    
-    return 
+    conf={
+        "bootstrap.servers": config.KAFKA_BROKER,
+        "group.id": "stream-ingestion-group",
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False
+    }
+    consumer=Consumer(conf)
+    consumer.subscribe([config.EVENT_RAW_TOPIC])
+    return consumer
 
 #----- TODO: 2 hàm làm sạch dữ liệu nhận từ kafka-----
 def clean_record(record):
