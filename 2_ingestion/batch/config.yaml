@@ -39,15 +39,16 @@ hdfs:
   replication: 1
 
 # ─── Source Data ────────────────────────────────────────────
+# Duong dan tu thu muc goc project (Big_data)
+# Su dung duong dan tuong doi de hoat dong tren moi may
 paths:
-  # Thư mục chứa file CSV/JSON nguồn
-  # (đường dẫn tuyệt đối hoặc tương đối từ repo root)
-  raw_data_dir: "C:/Users/Peitel/Desktop/Big_data/1_dataset/raw_data/ecommerce_dataset"
+  # Thu muc chua file CSV nguon (tu thu muc goc project)
+  raw_data_dir: "1_dataset/raw_data/ecommerce_dataset"
 
-  # Thư mục output local (log, checkpoint, ...)
+  # Thu muc output local (log, checkpoint, ...)
   output_dir: "./output"
 
-  # Thư mục lưu file Avro tạm thời trước khi upload lên HDFS
+  # Thu muc luu file Avro tam thoi truoc khi upload len HDFS
   avro_temp: "./avro_temp"
 
 # ─── Kafka (dự phòng – hiện tại batch không dùng) ─────────
