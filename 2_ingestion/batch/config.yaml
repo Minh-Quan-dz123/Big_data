@@ -42,7 +42,7 @@ hdfs:
 paths:
   # Thư mục chứa file CSV/JSON nguồn
   # (đường dẫn tuyệt đối hoặc tương đối từ repo root)
-  raw_data_dir: "../1_dataset/raw_data/ecommerce_dataset"
+  raw_data_dir: "C:/Users/Peitel/Desktop/Big_data/1_dataset/raw_data/ecommerce_dataset"
 
   # Thư mục output local (log, checkpoint, ...)
   output_dir: "./output"
