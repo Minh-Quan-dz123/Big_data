@@ -17,6 +17,7 @@ def create_consumer():
     """
     tạo consumer để đọc dữ liệu từ fake_realtime.py từ topic ABC1
     """
+    
     return 
 
 #----- TODO: 2 hàm làm sạch dữ liệu nhận từ kafka-----
