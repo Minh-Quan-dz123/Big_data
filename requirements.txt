@@ -6,7 +6,7 @@ pandas>=2.0.0
 
 # ─── Batch (HDFS + Avro) ───────────────────────────────────────────────────
 pyarrow>=14.0.0
-apache-avro>=1.11.0
+avro>=1.11.0
 
 # ─── Stream (Kafka) – chọn 1 trong 2 ─────────────────────────────────────
 # Recommended (nhanh, viết bằng C):
