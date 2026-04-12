@@ -1,0 +1,26 @@
+kafka:
+  bootstrap_servers: "localhost:9092"
+  # Topic đầu vào – fake_realtime.py gửi dữ liệu vào đây
+  input_topic: "ABC1"
+  # Topic đầu ra – sau khi clean sẽ gửi sang đây
+  output_topic: "ABC2"
+  # Consumer group
+  consumer_group: "stream-cleaning-group"
+  auto_offset_reset: "earliest"
+  enable_auto_commit: true
+  # Producer
+  acks: "all"
+  compression_type: "gzip"
+  batch_size: 16384
+  linger_ms: 10
+
+paths:
+  source_file: "../1_dataset/raw_data/ecommerce_dataset/events.csv"
+
+cleaner:
+  # Bỏ khoảng trắng thừa ở key và value
+  strip_whitespace: true
+  # Chuyển text về lowercase
+  lowercase_text: true
+  # Chuyển null / None thành ""
+  null_to_empty_str: true
