@@ -1,22 +1,20 @@
 """
 Stream Data Cleaning Pipeline.
-Đọc từ Kafka topic ABC1 → Clean → Gửi sang topic ABC2.
+Doc tu Kafka topic ABC1 -> Clean -> Gui sang topic ABC2.
 
-Sử dụng:
-    python main.py          # stream mode (loop vô hạn)
-    python main.py batch    # batch mode (đọc 1 lượt rồi thoát)
+Su dung:
+    python main.py          # stream mode (loop vo han)
+    python main.py batch    # batch mode (doc 1 luot roi thoat)
 """
 from __future__ import annotations
 
-import os
-import sys
 import json
 import logging
+import os
 import signal
+import sys
 from pathlib import Path
-from typing import Optional
 
-import pandas as pd
 import yaml
 
 logging.basicConfig(
@@ -26,17 +24,15 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-
-# ─── Config defaults ─────────────────────────────────────────────────────────
-DEFAULT_KAFKA_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-DEFAULT_INPUT_TOPIC   = "ABC1"
-DEFAULT_OUTPUT_TOPIC  = "ABC2"
+# Gia tri mac dinh
+DEFAULT_KAFKA_SERVERS  = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+DEFAULT_INPUT_TOPIC    = "ABC1"
+DEFAULT_OUTPUT_TOPIC   = "ABC2"
 DEFAULT_CONSUMER_GROUP = "stream-cleaning-group"
 
 
-# ─── Load config from YAML ───────────────────────────────────────────────────
 def load_config() -> dict:
-    """Đọc config.yaml nếu có."""
+    """Doc config.yaml neu co."""
     cfg_path = Path(__file__).parent / "config.yaml"
     if cfg_path.exists():
         with open(cfg_path, "r", encoding="utf-8") as f:
@@ -44,40 +40,35 @@ def load_config() -> dict:
         kafka = raw.get("kafka", {})
         return {
             "bootstrap_servers": kafka.get("bootstrap_servers", DEFAULT_KAFKA_SERVERS),
-            "input_topic":      kafka.get("input_topic",      DEFAULT_INPUT_TOPIC),
-            "output_topic":     kafka.get("output_topic",     DEFAULT_OUTPUT_TOPIC),
-            "consumer_group":   kafka.get("consumer_group",   DEFAULT_CONSUMER_GROUP),
+            "input_topic":       kafka.get("input_topic",       DEFAULT_INPUT_TOPIC),
+            "output_topic":      kafka.get("output_topic",      DEFAULT_OUTPUT_TOPIC),
+            "consumer_group":    kafka.get("consumer_group",    DEFAULT_CONSUMER_GROUP),
         }
     return {
         "bootstrap_servers": DEFAULT_KAFKA_SERVERS,
-        "input_topic":      DEFAULT_INPUT_TOPIC,
-        "output_topic":     DEFAULT_OUTPUT_TOPIC,
-        "consumer_group":   DEFAULT_CONSUMER_GROUP,
+        "input_topic":       DEFAULT_INPUT_TOPIC,
+        "output_topic":      DEFAULT_OUTPUT_TOPIC,
+        "consumer_group":    DEFAULT_CONSUMER_GROUP,
     }
 
 
-# ─── Kafka client factory ────────────────────────────────────────────────────
+# Tao Kafka client
 def _make_kafka_client(library: str, cfg: dict, mode: str):
-    """
-    Tạo Kafka client.
-    library: 'confluent' hoặc 'kafka-python'
-    mode:    'consumer' hoặc 'producer'
-    """
     if library == "confluent":
         if mode == "consumer":
             from confluent_kafka import Consumer
             return Consumer({
                 "bootstrap.servers":  cfg["bootstrap_servers"],
-                "group.id":           cfg["consumer_group"],
-                "auto.offset.reset":  "earliest",
-                "enable.auto.commit":  "true",
+                "group.id":          cfg["consumer_group"],
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": "true",
             })
         else:
             from confluent_kafka import Producer
             return Producer({
                 "bootstrap.servers": cfg["bootstrap_servers"],
-                "acks":              "all",
-                "retries":           "3",
+                "acks":             "all",
+                "retries":          "3",
             })
 
     # kafka-python fallback
@@ -94,38 +85,26 @@ def _make_kafka_client(library: str, cfg: dict, mode: str):
         from kafka import KafkaProducer
         return KafkaProducer(
             bootstrap_servers = cfg["bootstrap_servers"].split(","),
-            acks              = 1,
-            retries           = 3,
+            acks             = 1,
+            retries          = 3,
         )
 
 
-# ─── TODO 1: Tạo consumer ───────────────────────────────────────────────────
 def create_consumer(cfg: dict):
-    """
-    Tạo consumer đọc từ topic ABC1.
-    """
+    """Tao consumer doc tu topic input."""
     errors = {}
     for lib in ("confluent", "kafka-python"):
         try:
             client = _make_kafka_client(lib, cfg, "consumer")
-            log.info(f"Kafka Consumer: dùng '{lib}'")
+            log.info(f"Kafka Consumer: dung '{lib}'")
             return client
         except ImportError as e:
             errors[lib] = str(e)
-    raise ImportError(f"Không tìm thấy thư viện Kafka: {errors}")
+    raise ImportError(f"Khong tim thay thu vien Kafka: {errors}")
 
 
-# ─── TODO 2: Clean record ────────────────────────────────────────────────────
 def clean_record(record: dict) -> dict:
-    """
-    - strip whitespace
-    - lowercase text
-    - null → ""
-
-    Ví dụ:
-        {" Name ": "  AN  ", "Age": "20", "City ": None}
-        => {"name": "an", "age": "20", "city": ""}
-    """
+    """Strip, lowercase, null -> ''."""
     cleaned = {}
     for key, value in record.items():
         clean_key = key.strip().lower()
@@ -138,30 +117,23 @@ def clean_record(record: dict) -> dict:
     return cleaned
 
 
-# ─── TODO 3: Tạo producer ───────────────────────────────────────────────────
 def create_producer(cfg: dict):
-    """
-    Tạo producer gửi sang topic ABC2.
-    """
+    """Tao producer gui sang topic output."""
     errors = {}
     for lib in ("confluent", "kafka-python"):
         try:
             client = _make_kafka_client(lib, cfg, "producer")
-            log.info(f"Kafka Producer: dùng '{lib}'")
+            log.info(f"Kafka Producer: dung '{lib}'")
             return client
         except ImportError as e:
             errors[lib] = str(e)
-    raise ImportError(f"Không tìm thấy thư viện Kafka: {errors}")
+    raise ImportError(f"Khong tim thay thu vien Kafka: {errors}")
 
 
-# ─── Pipeline ─────────────────────────────────────────────────────────────────
 def run_stream_cleaning():
     print("[STREAM CLEAN START]")
 
-    mode = "stream"
-    if len(sys.argv) > 1:
-        mode = sys.argv[1].lower()
-
+    mode = sys.argv[1].lower() if len(sys.argv) > 1 else "stream"
     cfg = load_config()
 
     log.info(f"Input  topic : {cfg['input_topic']}")
@@ -174,11 +146,11 @@ def run_stream_cleaning():
     total_in, total_out = 0, 0
 
     def shutdown(signum, frame):
-        log.info("Đóng pipeline...")
+        log.info("Dong pipeline...")
         consumer.close()
         producer.flush()
         producer.close()
-        log.info(f"Kết thúc: vào={total_in} ra={total_out}")
+        log.info(f"Ket thuc: vao={total_in} ra={total_out}")
         sys.exit(0)
 
     signal.signal(signal.SIGINT,  shutdown)
@@ -205,7 +177,6 @@ def run_stream_cleaning():
 
             total_in += 1
             cleaned = clean_record(record)
-
             payload = json.dumps(cleaned, ensure_ascii=False).encode("utf-8")
 
             # confluent-kafka
@@ -218,18 +189,18 @@ def run_stream_cleaning():
             total_out += 1
 
             if mode == "batch":
-                log.info(f"[BATCH] Done. vào={total_in} ra={total_out}")
+                log.info(f"[BATCH] Done. vao={total_in} ra={total_out}")
                 break
 
             if total_in % 100 == 0:
                 producer.flush()
-                log.info(f"Progress: vào={total_in} ra={total_out}")
+                log.info(f"Progress: vao={total_in} ra={total_out}")
 
         producer.flush()
-        log.info(f"Hoàn thành: vào={total_in} ra={total_out}")
+        log.info(f"Hoan thanh: vao={total_in} ra={total_out}")
 
     except KeyboardInterrupt:
-        log.warning("Bị ngắt bởi người dùng.")
+        log.warning("Bi ngat boi nguoi dung.")
     finally:
         consumer.close()
         producer.flush()

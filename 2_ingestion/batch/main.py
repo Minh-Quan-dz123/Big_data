@@ -1,22 +1,20 @@
 """
 Batch Data Ingestion Pipeline.
-Dataset → Đọc + Clean → Ghi Avro → Upload HDFS.
+Doc CSV -> Clean -> Ghi Avro -> Upload HDFS.
 """
 from __future__ import annotations
 
-import os
-import sys
 import json
 import logging
 import subprocess
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
-import pandas as pd
 import pyarrow as pa
 import pyarrow.csv as pa_csv
 
-from configs import config
+from config_module import Config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,8 +23,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-
-# File → schema (không gồm events.csv/event.json)
+# File CSV -> ten bang trong HDFS
 FILE_TABLE_MAP = {
     "users.csv":       "users",
     "products.csv":    "products",
@@ -37,11 +34,8 @@ FILE_TABLE_MAP = {
 EXCLUDED = {"events.csv", "event.json", ".DS_Store", "Thumbs.db"}
 
 
-# ─── TODO 1: Clean dữ liệu ──────────────────────────────────────────────────
 def clean_table(table: pa.Table) -> pa.Table:
-    """
-    Strip whitespace, lowercase text, null → "".
-    """
+    """Strip, lowercase, null -> ''."""
     if table.num_rows == 0:
         return table
 
@@ -62,14 +56,12 @@ def clean_table(table: pa.Table) -> pa.Table:
     return pa.table(cleaned)
 
 
-# ─── TODO 2: Ghi Avro + Upload HDFS ────────────────────────────────────────
 def write_to_hdfs(local_avro: Path, hdfs_dir: str) -> bool:
-    """Tạo thư mục HDFS và upload file Avro."""
+    """Tao thu muc HDFS va upload Avro. Neu khong co HDFS -> skip."""
     if not local_avro.exists():
         log.error(f"File not found: {local_avro}")
         return False
 
-    # Tạo thư mục HDFS
     try:
         subprocess.run(
             ["hdfs", "dfs", "-mkdir", "-p", hdfs_dir],
@@ -87,33 +79,33 @@ def write_to_hdfs(local_avro: Path, hdfs_dir: str) -> bool:
         if result.returncode == 0:
             log.info(f"  [HDFS] {hdfs_path}")
             return True
-        log.warning(f"  [HDFS] Upload bỏ qua (HDFS không khả dụng): {result.stderr or result.stdout}")
+        log.warning(f"  [HDFS] Upload bi bo qua: {result.stderr or result.stdout}")
     except FileNotFoundError:
-        log.warning(f"  [HDFS] Upload bỏ qua (HDFS không khả dụng): lệnh 'hdfs' không tìm thấy")
+        log.warning("  [HDFS] Upload bi bo qua (lenh 'hdfs' khong ton tai)")
     return True
 
 
-# ─── BATCH PIPELINE ──────────────────────────────────────────────────────────
 def run_batch_ingestion():
     print("[BATCH START]")
 
-    cfg = config.Config.from_yaml(Path(__file__).parent / "config.yaml") \
+    cfg = Config.from_yaml(Path(__file__).parent / "config.yaml") \
         if (Path(__file__).parent / "config.yaml").exists() \
-        else config.Config()
+        else Config()
 
     raw_dir = cfg.RAW_DATA_DIR
     avro_dir = cfg.AVRO_TEMP_DIR
     avro_dir.mkdir(parents=True, exist_ok=True)
 
-    log.info(f"Nguồn : {raw_dir}")
+    log.info(f"Nguon : {raw_dir}")
     log.info(f"HDFS   : {cfg.HDFS_OUTPUT_BASE}")
 
     if not raw_dir.exists():
-        log.error(f"Thư mục nguồn không tồn tại: {raw_dir}")
+        log.error(f"Thu muc nguon khong ton tai: {raw_dir}")
         sys.exit(1)
 
-    files = [f for f in raw_dir.glob("*.csv") if f.name not in EXCLUDED and f.name in FILE_TABLE_MAP]
-    log.info(f"Tìm thấy {len(files)} file: {[f.name for f in files]}")
+    files = [f for f in raw_dir.glob("*.csv")
+             if f.name not in EXCLUDED and f.name in FILE_TABLE_MAP]
+    log.info(f"Tim thay {len(files)} file: {[f.name for f in files]}")
 
     success, failed = 0, 0
 
@@ -121,30 +113,30 @@ def run_batch_ingestion():
         schema = FILE_TABLE_MAP[file_path.name]
         log.info(f"\n▶ {file_path.name}")
 
-        # Đọc CSV bằng PyArrow
+        # Doc CSV bang PyArrow
         table = pa_csv.read_csv(file_path)
-        rows_before = table.num_rows
-        log.info(f"  [READ ] {rows_before:,} dòng")
+        log.info(f"  [READ ] {table.num_rows:,} dong")
 
         # Clean
         table_clean = clean_table(table)
-        log.info(f"  [CLEAN] {table_clean.num_rows:,} dòng sau clean")
+        log.info(f"  [CLEAN] {table_clean.num_rows:,} dong sau clean")
 
         if table_clean.num_rows == 0:
             failed += 1
             continue
 
-        # Ghi Avro local (dùng avro library)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        avro_file = avro_dir / f"{schema}_{timestamp}.avro"
-
+        # Ghi Avro
         import avro
         from avro.datafile import DataFileWriter
         from avro.io import DatumWriter
 
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        avro_file = avro_dir / f"{schema}_{timestamp}.avro"
+
         fields = [{"name": c, "type": "string"} for c in table_clean.column_names]
         avsc = avro.schema.parse(json.dumps({
-            "type": "record", "name": schema,
+            "type": "record",
+            "name": schema,
             "namespace": "ecommerce.raw",
             "fields": fields,
         }))
@@ -164,12 +156,12 @@ def run_batch_ingestion():
         hdfs_dir = f"{cfg.HDFS_OUTPUT_BASE}/{schema}"
         if write_to_hdfs(avro_file, hdfs_dir):
             success += 1
-            log.info(f"  [DONE ] {file_path.name} → {hdfs_dir}")
+            log.info(f"  [DONE ] {file_path.name} -> {hdfs_dir}")
         else:
             failed += 1
 
     log.info(f"\n{'='*60}")
-    log.info(f"Kết quả: {success} thành công, {failed} thất bại")
+    log.info(f"Ket qua: {success} thanh cong, {failed} that bai")
     log.info(f"{'='*60}")
 
 
