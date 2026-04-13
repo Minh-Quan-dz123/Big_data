@@ -73,19 +73,108 @@ def clean_record(record):
 
 #----- TODO: 3 tạo producer-----
 def create_producer():
-    return 
+    conf={
+        "bootstrap.servers": config.KAFKA_BROKER,
+        "acks": "all",
+        "retries": 3,
+    }
+    return Producer(conf)
 
+def delivery_report(err, msg):
+    if err is not None:
+        print(f"Message delivery failed: {err}")
+    else:
+        print(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
 
 # ----- TODO: 4 đẩy dữ liệu topic ABC2----
 def run_stream_cleaning():
     print("[STREAM CLEAN START]")
-    """
-        1. tạo consumer, producer
-        2. đọc data từ topic ABC1 
-        3. clean
-        4. gửi sang topic ABC2
-    """
-    return
 
+    """
+    Pipeline xử lý stream:
+    1. Tạo Kafka consumer + producer
+    2. Đọc dữ liệu từ topic ABC1
+    3. Làm sạch dữ liệu (clean)
+    4. Gửi dữ liệu đã clean sang topic ABC2
+    """
+
+    # 1. Khởi tạo consumer để đọc dữ liệu từ Kafka (ABC1)
+    consumer = create_consumer()
+
+    # 2. Khởi tạo producer để gửi dữ liệu sang Kafka (ABC2)
+    producer = create_producer()
+
+    try:
+        # Loop chạy liên tục để consume stream
+        while True:
+
+            # 3. Đọc message từ Kafka
+            msg = consumer.poll(1.0)  # chờ 1s để lấy message mới
+
+            # Nếu không có message thì bỏ qua vòng lặp
+            if msg is None:
+                continue
+
+            # Nếu message có lỗi từ Kafka
+            if msg.error():
+                # End of partition thì bỏ qua
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+
+                # Lỗi khác thì log ra
+                print(f"Consumer error: {msg.error()}")
+                continue
+
+            try:
+                # 4. Decode dữ liệu từ Kafka
+                raw = msg.value().decode("utf-8")
+
+                # Parse JSON string -> dict
+                data = json.loads(raw)
+
+                print("\n[RAW DATA]", data)
+
+                # 5. CLEAN DATA
+                # clean_record: hàm xử lý dữ liệu (lọc null, format, chuẩn hóa,...)
+                cleaned = clean_record(data)
+
+                # Thêm timestamp xử lý
+                cleaned["processed_at"] = datetime.now().isoformat()
+
+                print("[CLEANED DATA]", cleaned)
+
+                # 6. GỬI SANG TOPIC ABC2
+                producer.produce(
+                    topic=config.EVENT_CLEANED_TOPIC,  # topic đích
+                    value=json.dumps(cleaned).encode("utf-8"),
+                    callback=delivery_report  # callback báo gửi thành công/thất bại
+                )
+
+                # Flush nhẹ để đẩy message đi ngay
+                producer.poll(0)
+
+                # Commit offset để Kafka biết message đã xử lý xong
+                consumer.commit(asynchronous=True)
+
+            except json.JSONDecodeError as e:
+                # Lỗi dữ liệu không phải JSON hợp lệ
+                print(f"JSON decode error: {e}")
+
+            except Exception as e:
+                # Lỗi xử lý chung
+                print(f"Error processing message: {e}")
+
+    except KeyboardInterrupt:
+        print("Stream cleaning stopped by user.")
+
+    finally:
+        # Cleanup tài nguyên
+        consumer.close()
+        producer.flush()
+
+
+# =========================
+# ENTRY POINT
+# =========================
 if __name__ == "__main__":
     run_stream_cleaning()
