@@ -5,7 +5,7 @@ Thành phần này gồm các bảng chứa dữ liệu mới nhất gần realt
    • User_id           : của người dùng (ví dụ: U001922)
    • Product_id        : của sản phẩm được gợi ý (ví dụ: P001233)
    • Interest_type     : loại hành vi thể hiện sự quan tâm (ví dụ: view, cart, purchase, wishlist)
-   • Event_time        : thời điểm người dùng thực hiện hành vi (ví dụ: 2026-04-09T10:45:00)
+   • Event_time        : thời điểm người dùng thực hiện hành vi  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
    • Item_price        : giá 1 sản phẩm (ví dụ: 12.000)
    • Session_id (tùy chọn)       : phiên tương tác của người dùng (ví dụ: S001122)
    • Computed_score (tùy chọn)   : điểm đánh giá mức độ quan tâm theo thuật toán realtime (ví dụ: 0.87)
@@ -14,7 +14,7 @@ Thành phần này gồm các bảng chứa dữ liệu mới nhất gần realt
    • Product_id        : ID sản phẩm (ví dụ: P001)
    • Trend_score       : điểm xu hướng (ví dụ: 0.85)
    • Event_count       : số lượt tương tác trong x giờ (ví dụ: 120)
-   • Computed_time     : thời điểm tính toán/cập nhật điểm trending (ví dụ: 2026-04-09T10:50:00)
+   • Computed_time     : thời điểm tính toán/cập nhật điểm trending  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
    • Category_id       : ID danh mục sản phẩm
    • Region_id (tùy chọn)       : ID khu vực hoặc thị trường
 
@@ -23,5 +23,5 @@ Thành phần này gồm các bảng chứa dữ liệu mới nhất gần realt
    • Product_id            : ID sản phẩm được gợi ý (ví dụ: P045)
    • Recommendation_score  : điểm gợi ý (ví dụ: 0.87)
    • Recommendation_type   : loại gợi ý (ví dụ: content_based, collaborative, hybrid)
-   • Computed_time         : thời điểm tính/generate gợi ý (ví dụ: 2026-04-09T10:52:00)
+   • Computed_time         : thời điểm tính/generate gợi ý  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000)
    • Context_info (tùy chọn) : thông tin ngữ cảnh như thiết bị, khu vực, phiên hiện tại, dùng để cá nhân hóa gợi ý hơn

@@ -1,3 +1,5 @@
+#chương trình này là để lấy dữ liệu từ kaggle
+
 import os
 from kaggle.api.kaggle_api_extended import KaggleApi
 from dotenv import load_dotenv
