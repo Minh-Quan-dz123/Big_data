@@ -77,6 +77,9 @@ def create_producer():
         "bootstrap.servers": config.KAFKA_BROKER,
         "acks": "all",
         "retries": 3,
+        "linger.ms": 5,
+        "compression.type": "snappy"
+        
     }
     return Producer(conf)
 
@@ -130,7 +133,10 @@ def run_stream_cleaning():
                 raw = msg.value().decode("utf-8")
 
                 # Parse JSON string -> dict
-                data = json.loads(raw)
+                data = safe_parse(raw)
+                
+                if data is None:
+                    continue
 
                 print("\n[RAW DATA]", data)
 
@@ -172,6 +178,13 @@ def run_stream_cleaning():
         consumer.close()
         producer.flush()
 
+#ext safe_parse_json(json_str):
+def safe_parse(raw):
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        print(f"Invalid JSON: {raw}")
+        return None
 
 # =========================
 # ENTRY POINT
