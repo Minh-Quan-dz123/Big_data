@@ -51,6 +51,13 @@ spec:
             requests:
               cpu: "500m"
               memory: "512Mi"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /opt/spark/data
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: csv-data-pvc
 ---
 apiVersion: apps/v1
 kind: Deployment
