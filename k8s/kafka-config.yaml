@@ -28,10 +28,10 @@ spec:
     version: 4.2.0
 
     listeners:                  # cổng kết nối
-      - name: external          # tên listener
+      - name: plain         # tên listener
         port: 9092              # cổng kafka
-       # type: internal          # chỉ cho phép truy cập trong cluster kubernetes
-        type: nodeport          # cho phép bên ngoài và trong đều truy cập
+        type: internal          # chỉ cho phép truy cập trong cluster kubernetes
+        #type: nodeport          # cho phép bên ngoài và trong đều truy cập
         tls: false              # ko mã hóa
 
     config:
