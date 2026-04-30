@@ -1,0 +1,41 @@
+apiVersion: batch/v1  # Dùng API của Kubernetes để chạy batch job 
+kind: Job             # đây là 1 job (nghĩa là chạy 1 lần xong thì dừng)
+metadata:
+  name: spark-job1-ingestion-batch    # tên job
+spec:                 # bắt đầu cấu hình hành vi
+  backoffLimit: 1     # nếu fail thì thử lại tối đa 1 lần
+
+  template:           # job sẽ tạo pod trên các thông tin dưới
+    metadata:
+      labels:
+        app: spark-job1     # gắn label cho job
+    spec:
+      restartPolicy: Never  # pod ko tự restart
+
+      containers:
+        - name: spark-job   # tên container bên trong Pod
+          image: spark-job1-ingestion-batch   # image Docker đã build
+          imagePullPolicy: Never              # ko pull từ Docker Hub
+
+          # cmd để chạy Spark job
+          command:
+            [
+              "/opt/spark/bin/spark-submit"
+            ]
+
+          args: # toàn bộ config chạy spark
+            [
+              "--master", "spark://spark-master:7077",  # kết nối tới Spark Master
+              "--deploy-mode", "client",                # driver chạy ngay trong container này
+                                                        # cấu hình MinIO 
+              "--conf", "spark.hadoop.fs.s3a.endpoint=minio:9000",
+              "--conf", "spark.hadoop.fs.s3a.access.key=minioadmin",
+              "--conf", "spark.hadoop.fs.s3a.secret.key=minioadmin",
+              "--conf", "spark.hadoop.fs.s3a.path.style.access=true",
+              "--conf", "spark.hadoop.fs.s3a.connection.ssl.enabled=false",   # tắt HTTPS
+
+              "--conf", "spark.executor.memory=512m",   # Cấu hình RAM cho executor
+              "--conf", "spark.executor.cores=1",       # Cấu hình RAM cho executor
+
+              "local:///opt/spark/app/main.py"          # file python để chạy
+            ]

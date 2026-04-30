@@ -44,8 +44,8 @@ spec:
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin"
-          ports:
-            - containerPort: 9000   # cổng backend của MinIO
+          ports:                    # khai báo nội bộ
+            - containerPort: 9000   # cổng backend của MinIO 
             - containerPort: 9001   # mở UI console
           volumeMounts:             # gắn storage vào container
             - name: data
