@@ -3,16 +3,18 @@ kind: Service             # Service = đường mạng
 metadata:
   name: minio             # tên service
 spec:
-  clusterIP: None         # Đây là Headless Service, ko tạo IP ảo
+  type: NodePort
   selector:
     app: minio            # service sẽ chọn các pod có tên label
   ports:                  # cổng Servicee
     - name: api           # là tên định danh cổng backend (tự đặt)
       port: 9000          # cổng backend của MinIO bên ngoài cluster (Service)
       targetPort: 9000    # cổng trong container MinIO
+      nodePort: 30090     # cổng ngoài máy
     - name: console       # tên cổng khác là cổng UI
       port: 9001          # tương tự
       targetPort: 9001
+      nodePort: 30091
 ---
 apiVersion: apps/v1
 kind: StatefulSet         # StatefulSet = máy chạy dữ liệu
@@ -57,4 +59,4 @@ spec:
         accessModes: ["ReadWriteOnce"] # chỉ 1 node được ghi vào volume này
         resources:
           requests:
-            storage: 2Gi
+            storage: 1Gi

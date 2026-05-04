@@ -2,6 +2,19 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
+    extraPortMappings:
+    - containerPort: 30080  # expose spark-master
+      hostPort: 30080
+    - containerPort: 30081  # expose airflow
+      hostPort: 30081
+    - containerPort: 30090  # expose minio API
+      hostPort: 30090
+    - containerPort: 30091  # expose minio UI
+      hostPort: 30091
+    - containerPort: 30092  # expose kafka
+      hostPort: 30092
+    - containerPort: 30042  # expose Cassandra
+      hostPort: 30042
   - role: worker
   - role: worker
   - role: worker

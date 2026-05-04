@@ -5,14 +5,15 @@ metadata:
   labels:
     app: spark-master
 spec:                     # cấu hình
-  type: ClusterIP         # chỉ truy cập được trong cluster (ko public ra internet)
+  type: NodePort          # để truy cập UI từ máy host (Kind)
   ports:
-    - port: 7077          # port chính của Spark Master
-      name: rpc
+    - name: rpc          
+      port: 7077          # port chính của Spark Master
       targetPort: 7077
-    - port: 8080          # port của UI
-      name: web-ui
+    - name: web-ui
+      port: 8080          # port của UI
       targetPort: 8080
+      nodePort: 30080     # UI: http://localhost:30080
   selector:               # Service sẽ “bám vào” các Pod có label: spark-master
     app: spark-master
 ---
@@ -53,7 +54,7 @@ spec:
               memory: "512Mi"
 ---
 apiVersion: apps/v1
-kind: Deployment            # chạy Spark Master
+kind: Deployment            # chạy Worker
 metadata:
   name: spark-worker
   labels:
@@ -68,6 +69,13 @@ spec:                       # cấu hình
       labels:
         app: spark-worker
     spec:                   # cấu hình pod
+      initContainers:
+      - name: wait-for-master
+        image: busybox
+        command:
+          - sh
+          - -c
+          - "until nslookup spark-master; do echo waiting; sleep 2; done"
       containers:
         - name: spark-worker
           image: apache/spark:3.4.1
