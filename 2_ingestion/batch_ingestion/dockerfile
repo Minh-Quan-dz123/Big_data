@@ -4,11 +4,8 @@ FROM apache/spark:3.4.1
 # 2 chuyển sang user root ( chạy container với quyền admin)
 USER root
 
-# 3.1 copy tất cả file .jar từ thư mục jars/ trên local vào /opt/spark/jars/ = nơi Spark load thư viện
+# 3 copy tất cả file .jar từ thư mục jars/ trên local vào /opt/spark/jars/ = nơi Spark load thư viện
 COPY jars/*.jar /opt/spark/jars/
-
-# 3.2 copy data copy dữ liệu thô
-COPY ../../1_dataset/raw_data /opt/spark/data
 
 # 4 copy code
 COPY main.py /opt/spark/app/main.py

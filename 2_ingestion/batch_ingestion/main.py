@@ -9,15 +9,18 @@ from pyspark.sql.functions import col, lower, trim  # gọi cột, chuyển ch
 # 1 ================= CONFIG =================
 #DATASET_DIR = "1_dataset/raw_data"
 
-# 1.1. Đường dẫn trong container Spark, Nơi Spark container sẽ đọc CSV
-DATASET_DIR = "/opt/spark/data"  # mục này cần được gắn vào container trong 1 pod
+# path đến data chưa làm sạch
+INPUT_PATH = "s3a://datalake/raw/"
+# path ra 
+OUTPUT_PATH = "s3a://datalake/processed/"
+
+CSV_FILES = ["orders.csv", "users.csv", "products.csv", "reviews.csv", "order_items.csv"]
 
 # 1.2. Cấu hình đường dẫn để đọc ghi dữ liệu trong MinIO storage
 MINIO_CONF = {
     "endpoint": "minio:9000",  # địa chỉ minio trong kind ở dòng 11 trong file minio-config.yaml
     "access_key": "minioadmin", # ở dòng 43->46 trong file minio-config.yaml
     "secret_key": "minioadmin",
-    "bucket": "datalake"        # phải tự tạo trong MinIO ví dụ datalake/                                                              
 }                                                                   #├── orders.csv
                                                                     #├── users.csv
                                                                     #├── products.csv
@@ -49,7 +52,8 @@ def get_spark():
     return SparkSession.builder \
         .appName("CSV_to_MinIO") \
         .config("spark.jars",
-                "/opt/spark/jars/hadoop-aws-3.3.4.jar,/opt/spark/jars/aws-java-sdk-bundle-1.12.262.jar") \
+                "/opt/spark/jars/hadoop-aws-3.3.4.jar,"
+                "/opt/spark/jars/aws-java-sdk-bundle-1.12.262.jar") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
         .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
         .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
@@ -92,30 +96,19 @@ def run_pipeline():
     logger.info("START SPARK PIPELINE CSV → MINIO")
     logger.info("="*50)
 
-    # 5.2 nếu ko có folder -> stop
-    if not os.path.exists(DATASET_DIR):
-        logger.error(f"Không tìm thấy thư mục: {DATASET_DIR}")
-        return
-
     # 5.3 tạo spark
     spark = get_spark()
     spark.sparkContext.setLogLevel("ERROR")
 
-    # 5.4 list CSV: lấy tất cả file .csv
-    csv_files = [f for f in os.listdir(DATASET_DIR) if f.endswith(".csv")]
-    # kiểm tra
-    if not csv_files:
-        logger.warning("Không có file CSV nào")
-        return
-    
+ 
     # 5.5 khai báo list chứa file
     success_files = []
     failed_files = []
 
     # 5.6 for từng file và ghi lại thời gian bắt đầu xử lý file để tính duration
-    for file_name in csv_files:
+    for file_name in CSV_FILES:
         start_time = datetime.now()
-        file_path = os.path.join(DATASET_DIR, file_name)
+        #file_path = os.path.join(DATASET_DIR, file_name)
 
         logger.info(f"--- Processing: {file_name} ---")
 
@@ -124,18 +117,18 @@ def run_pipeline():
             df = spark.read \
                 .option("header", "true") \
                 .option("inferSchema", "true") \
-                .csv(f"file://{os.path.join(DATASET_DIR, file_name)}")
+                .csv(INPUT_PATH + file_name)
 
             # 5.6.2. Clean
             df_clean = clean_df(df)
 
             # 5.6.3. Upload (ghi lên MinIO)
-            target_path = f"s3a://{MINIO_CONF['bucket']}/raw/{file_name}"
+            #target_path = f"s3a://{MINIO_CONF['bucket']}/raw/{file_name}"
 
-            df_clean.write \
+            df_clean.coalesce(1).write \
                 .mode("overwrite") \
                 .option("header", "true") \
-                .csv(target_path)
+                .csv(OUTPUT_PATH + file_name.replace(".csv", ""))
 
             duration = (datetime.now() - start_time).total_seconds()
 
@@ -151,7 +144,7 @@ def run_pipeline():
     # ================= SUMMARY =================
     logger.info("="*50)
     logger.info("SUMMARY")
-    logger.info(f"Tổng file: {len(csv_files)}")
+    logger.info(f"Tổng file: {len(CSV_FILES)}")
     logger.info(f"Thành công: {len(success_files)}")
     logger.info(f"Thất bại: {len(failed_files)}")
 

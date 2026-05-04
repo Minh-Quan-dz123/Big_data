@@ -26,7 +26,7 @@ spec:                 # bắt đầu cấu hình hành vi
           args: # toàn bộ config chạy spark
             [
               "--master", "spark://spark-master:7077",  # kết nối tới Spark Master
-              "--deploy-mode", "client",                # driver chạy ngay trong container này
+              "--deploy-mode", "cluster",               # 
                                                         # cấu hình MinIO 
               "--conf", "spark.hadoop.fs.s3a.endpoint=minio:9000",
               "--conf", "spark.hadoop.fs.s3a.access.key=minioadmin",
@@ -37,5 +37,5 @@ spec:                 # bắt đầu cấu hình hành vi
               "--conf", "spark.executor.memory=512m",   # Cấu hình RAM cho executor
               "--conf", "spark.executor.cores=1",       # Cấu hình RAM cho executor
 
-              "local:///opt/spark/app/main.py"          # file python để chạy
+              "file:///opt/spark/app/main.py"          # file python để chạy
             ]
