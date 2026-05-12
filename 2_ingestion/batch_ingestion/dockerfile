@@ -1,0 +1,14 @@
+# 1 lấy image có sẵn của Spark version 3.4.1 từ Docker Hub
+FROM apache/spark:3.4.1 
+
+# 2 chuyển sang user root ( chạy container với quyền admin)
+USER root
+
+# 3 copy tất cả file .jar từ thư mục jars/ trên local vào /opt/spark/jars/ = nơi Spark load thư viện
+COPY jars/*.jar /opt/spark/jars/
+
+# 4 copy code
+COPY main.py /opt/spark/app/main.py
+
+# 5 đặt thư mục làm việc
+WORKDIR /opt/spark/app
