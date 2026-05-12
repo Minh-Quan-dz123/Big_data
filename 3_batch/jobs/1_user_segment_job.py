@@ -1,4 +1,4 @@
-# 1 import thư viện
+# 1 IMPORT THƯ VIỆN
 # 1.1.
 from pyspark.sql import SparkSession
 # SparkSession:
@@ -72,7 +72,7 @@ import logging  # in log
 import sys # thao tác với hệ thống Python
 
 
-# 2. config
+# 2. CẤU HÌNH 
 
 # 2.1 input path
 INPUT_PATH = "s3a://datalake/processed/"
@@ -104,7 +104,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# 3 khởi object spark
+# 3 KHỞI TẠO OBJECT SPARK
 # tạo hàm để gọi khởi tạo object
 def create_spark():
     return SparkSession.builder \
@@ -149,8 +149,9 @@ def create_spark():
         ) \
         .getOrCreate()
 
-# 4 các hàm logic xử ly
-# 4.1. hàm build feature cho ML
+# 4 BUIL USER SEGMENT
+
+# 4.1. HÀM BUILD FEATURE ML
 # input là 2 bảng users và orders
 # output là tạo cột 
 # - days_since_signup: số ngày kể từ lúc đăng ký tới giờ
@@ -220,7 +221,7 @@ def build_features(users, orders):
     # logger.info("Feature engineering completed")
     return data_feature # (user_id, days_since_sign, total_orders, total_.., cancellation rate)
 
-# 4.2 logic KMeans
+# 4.2 KMEANS PROCESS
 # hàm gom nhóm sau khi có data_feature
 def run_kmeans(data_feature):
     logger.info("Starting KMeans clustering...")
@@ -289,7 +290,7 @@ def run_kmeans(data_feature):
             "completion_rate": center[2],
             "cancellation_rate": center[3]
         }
-        
+
     logger.info(cluster_info)
     
     # chia cluster mua nhiều / mua ít
@@ -347,7 +348,7 @@ def run_kmeans(data_feature):
 
     return predicted
 
-# 5. lưu vào cassandra
+# 5.  SAVE TO CASSANDRA
 def save_to_cassandra(df):
     logger.info("Saving to Cassandra...")
 
@@ -374,6 +375,7 @@ def save_to_cassandra(df):
         .save()
     logger.info("Saved to Cassandra successfully")
 
+# 6 RUN PROCESS FULL
 def run_pipeline():
     logger.info("="*50)
     logger.info("START USER SEGMENTATION PIPELINE")
