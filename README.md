@@ -100,7 +100,7 @@ kubectl get pods
 
 ```bash
 kubectl apply -f kafka-config.yaml
-kubectl get pods -w
+kubectl get pods
 ```
 
 ---

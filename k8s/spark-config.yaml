@@ -1,55 +1,56 @@
 apiVersion: v1
-kind: Service
+kind: Service             # tạo 1 Service tên spark-master
 metadata:
   name: spark-master
   labels:
     app: spark-master
-spec:
-  type: ClusterIP
+spec:                     # cấu hình
+  type: NodePort          # để truy cập UI từ máy host (Kind)
   ports:
-    - port: 7077
-      name: rpc
+    - name: rpc          
+      port: 7077          # port chính của Spark Master
       targetPort: 7077
-    - port: 8080
-      name: web-ui
+    - name: web-ui
+      port: 8080          # port của UI
       targetPort: 8080
-  selector:
+      nodePort: 30080     # UI: http://localhost:30080
+  selector:               # Service sẽ “bám vào” các Pod có label: spark-master
     app: spark-master
 ---
 apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: spark-master
+kind: Deployment          # chạy Spark Master
+metadata:                 
+  name: spark-master      
   labels:
     app: spark-master
 spec:
   replicas: 1
-  selector:
+  selector:               # chỉ 1 Spark master
     matchLabels:
       app: spark-master
-  template:
+  template:               # Pod template
     metadata:
       labels:
         app: spark-master
     spec:
-      enableServiceLinks: false
+      enableServiceLinks: false  # Tắt tính năng tự động inject các biến môi trường từ Service vào container.
       containers:
         - name: spark-master
           image: apache/spark:3.4.1
           command:
             [
-              "/opt/spark/bin/spark-class",
-              "org.apache.spark.deploy.master.Master"
+              "/opt/spark/bin/spark-class", # launcher của Spark
+              "org.apache.spark.deploy.master.Master" # chạy chế độ Spark Master thật, các name ở trên chỉ là tự đặt
             ]
-          ports:
+          ports:                    # khai báo 2 port
             - containerPort: 7077
             - containerPort: 8080
-          env:
+          env:                      # bắt Spark chạy foreground (ko chạy nền)
             - name: SPARK_NO_DAEMONIZE
               value: "true"
           resources:
             requests:
-              cpu: "500m"
+              cpu: "500m"     # 0.5CPU
               memory: "512Mi"
           volumeMounts:
             - name: data-volume
@@ -60,13 +61,13 @@ spec:
             claimName: csv-data-pvc
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: Deployment            # chạy Worker
 metadata:
   name: spark-worker
   labels:
     app: spark-worker
-spec:
-  replicas: 2  
+spec:                       # cấu hình
+  replicas: 2               # chạy 2 worker node
   selector:
     matchLabels:
       app: spark-worker
@@ -74,21 +75,28 @@ spec:
     metadata:
       labels:
         app: spark-worker
-    spec:
+    spec:                   # cấu hình pod
+      initContainers:
+      - name: wait-for-master
+        image: busybox
+        command:
+          - sh
+          - -c
+          - "until nslookup spark-master; do echo waiting; sleep 2; done"
       containers:
         - name: spark-worker
           image: apache/spark:3.4.1
           command:
             [
-              "/opt/spark/bin/spark-class",
-              "org.apache.spark.deploy.worker.Worker",
-              "spark://spark-master:7077"
+              "/opt/spark/bin/spark-class",            # launcher của Spark
+              "org.apache.spark.deploy.worker.Worker", # chạy chế độ Spark Worker
+              "spark://spark-master:7077"              # kết nối đến Master qua spark://spark-master:7077
             ]
           env:
             - name: SPARK_WORKER_MEMORY
               value: "1g"
             - name: SPARK_WORKER_CORES
-              value: "1"
+              value: "1"                  # 1 CPU
           resources:
             requests:
               cpu: "1000m"

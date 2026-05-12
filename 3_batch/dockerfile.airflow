@@ -1,0 +1,12 @@
+# 1 lấy image có sẵn từ Docker Hub
+FROM apache/airflow:2.8.1
+
+# 2 chuyển sang user root ( chạy container với quyền admin)
+USER root
+
+RUN pip install apache-airflow-providers-apache-spark
+
+USER airflow
+
+# 4 copy DAG
+COPY dags/ /opt/airflow/dags

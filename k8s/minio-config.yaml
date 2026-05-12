@@ -1,58 +1,62 @@
 apiVersion: v1
-kind: Service
+kind: Service             # Service = đường mạng
 metadata:
-  name: minio
+  name: minio             # tên service
 spec:
-  clusterIP: None
+  type: NodePort
   selector:
-    app: minio
-  ports:
-    - name: api
-      port: 9000
-      targetPort: 9000
-    - name: console
-      port: 9001
+    app: minio            # service sẽ chọn các pod có tên label
+  ports:                  # cổng Servicee
+    - name: api           # là tên định danh cổng backend (tự đặt)
+      port: 9000          # cổng backend của MinIO bên ngoài cluster (Service)
+      targetPort: 9000    # cổng trong container MinIO
+      nodePort: 30090     # cổng ngoài máy
+    - name: console       # tên cổng khác là cổng UI
+      port: 9001          # tương tự
       targetPort: 9001
+      nodePort: 30091
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: StatefulSet         # StatefulSet = máy chạy dữ liệu
 metadata:
-  name: minio
+  name: minio             
 spec:
-  serviceName: minio
-  replicas: 4
-  selector:
+  serviceName: minio      # gắn với service ở trên
+  replicas: 4             # tạo 4 pod
+  selector:               # quản lý các pod có lable là minio
     matchLabels:
       app: minio
-  template:
+  template:               # pod được tạo sẽ có lable là minio
     metadata:
       labels:
         app: minio
     spec:
-      containers:
+      containers:         # cấu hình container trong pod
         - name: minio
-          image: minio/minio:latest
-          args:
+          image: minio/minio:latest # dùng image MinIO mới nhất
+          args:                     # chạy lệnh minio server và các dạng ở dưới
             - server
-            - http://minio-{0...3}.minio.default.svc.cluster.local/data
-            - --console-address
+            - http://minio-{0...3}.minio.default.svc.cluster.local/data 
+            # nghĩa là các node lần lượt tên minio-0/1/2/3 
+            # và /data là thư mục lưu data trong container
+            - --console-address     # mở UL console tại port 9001
             - ":9001"
-          env:
+          env:                      # các biến môi trường, UI hay backend khác muốn truy cập đều cần
             - name: MINIO_ROOT_USER
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin"
-          ports:
-            - containerPort: 9000
-            - containerPort: 9001
-          volumeMounts:
+          ports:                    # khai báo nội bộ
+            - containerPort: 9000   # cổng backend của MinIO 
+            - containerPort: 9001   # mở UI console
+          volumeMounts:             # gắn storage vào container
             - name: data
-              mountPath: /data
+              mountPath: /data      # /data là nơi MinIO lưu file
   volumeClaimTemplates:
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
+        accessModes: ["ReadWriteOnce"] # chỉ 1 node được ghi vào volume này
         resources:
           requests:
-            storage: 2Gi
+            storage: 1Gi

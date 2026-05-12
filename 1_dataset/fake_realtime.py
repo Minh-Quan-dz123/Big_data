@@ -1,11 +1,12 @@
-import pandas as pd
-import json
-import time
-from kafka import KafkaProducer
-from datetime import datetime
+# import thư viện
+import pandas as pd                 # đọc file csv
+import json                         # đọc file JSON
+import time                         # các hàm thời gian như delay
+from kafka import KafkaProducer     # gửi dữ liệu lên kafka
+from datetime import datetime       # các hàm thời gian
 
 # 1. Cấu hình các tham số
-KAFKA_BROKER = 'localhost:9092'  # Địa chỉ Kafka Broker chạy ở local
+KAFKA_BROKER = 'my-cluster-kafka-bootstrap:9092'  # Địa chỉ Kafka Broker chạy ở trong kind
 TOPIC_NAME = 'user_events'       # Tên topic bạn sẽ gửi dữ liệu vào
 # DATA_PATH = './raw_data/ecommerce_dataset/events.csv' 
 # # Đường dẫn file dữ liệu
