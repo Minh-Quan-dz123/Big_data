@@ -97,7 +97,10 @@ final_df = enriched_df.select(
 )
 
 print("--- Kết quả tính toán mẫu: ---")
-final_df.show(5, truncate=False)
+# thay số để hiện ra kết quả
+final_df.show(5, truncate=False) 
+total_rules = final_df.count()
+print(f"--- Tổng số cặp sản phẩm tìm được: {total_rules} cặp ---")
 
 # ==========================================
 # BƯỚC 5: XUẤT RA FILE AVRO
