@@ -3,7 +3,13 @@ import pandas as pd                 # đọc file csv
 import json                         # đọc file JSON
 import time                         # các hàm thời gian như delay
 from kafka import KafkaProducer     # gửi dữ liệu lên kafka
-from datetime import datetime       # các hàm thời gian
+from datetime import datetime, timedelta       # các hàm thời gian
+import sys
+import os
+# Add root path to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.utils import current_time
+
 
 # 1. Cấu hình các tham số
 KAFKA_BROKER = 'my-cluster-kafka-bootstrap:9092'  # Địa chỉ Kafka Broker chạy ở trong kind
@@ -41,14 +47,16 @@ def start_simulation():
 
     # 4. Vòng lặp giả lập realtime
     print(f"--- Bắt đầu giả lập. Tần suất: {DELAY_SECONDS}s/event ---")
-    for event in events:
-        # Thêm timestamp hiện tại để giả lập thời gian thực chính xác hơn
-        event['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    start_sim_time = current_time()
+    for i, event in enumerate(events):
+        # Thêm timestamp giả lập bắt đầu từ 2025-11-14 23:18:00
+        sim_time = start_sim_time + timedelta(seconds=i * DELAY_SECONDS)
+        event['timestamp'] = sim_time.strftime('%Y-%m-%d %H:%M:%S')
         
         # Gửi dữ liệu lên Kafka
         producer.send(TOPIC_NAME, value=event)
         
-        print(f"Đã gửi: {event['user_id']} - {event['event_type']} cho sản phẩm {event['product_id']}")
+        print(f"Đã gửi: {event['user_id']} - {event['event_type']} cho sản phẩm {event['product_id']} với timestamp {event['timestamp']}")
         
         # Nghỉ n giây trước khi gửi event tiếp theo
         time.sleep(DELAY_SECONDS)
