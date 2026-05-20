@@ -7,6 +7,11 @@ import os
 import glob
 import time
 import pandas as pd
+import sys
+# Add root path to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from utils.utils import current_time
+
 
 from mlxtend.frequent_patterns import fpgrowth, association_rules
 
@@ -118,7 +123,7 @@ rules_1_1["Category_cross_sell"] = rules_1_1["cat_1"] != rules_1_1["cat_2"]
 rules_1_1["Complementary_score"] = ((rules_1_1["confidence"] * 0.7) +((rules_1_1["lift"] / 10) * 0.3)).round(2)
 
 # timestamp giống unix_timestamp(current_timestamp()) * 1000
-rules_1_1["Computed_date"] = int(time.time() * 1000)
+rules_1_1["Computed_date"] = int(current_time().timestamp() * 1000)
 
 # 9. CHỌN OUTPUT COLUMNS 
 final_df = rules_1_1[[

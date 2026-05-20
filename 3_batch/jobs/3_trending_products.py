@@ -12,6 +12,8 @@ from pyspark.sql.functions import (
     col, count, sum, when, current_date, datediff, to_timestamp, lit, coalesce, current_timestamp
 )
 from datetime import datetime
+from common.utils import current_time
+
 import logging
 import sys
 
@@ -76,7 +78,8 @@ def build_trending_products(events, orders, order_items, products):
     # Lọc chỉ lấy các event_type = 'view'
     views = events.filter(col("event_type") == "view")
     views = views.withColumn("event_date", to_timestamp(col("event_timestamp")))
-    views = views.withColumn("days_ago", datediff(current_date(), col("event_date")))
+    ref_date = current_time().strftime('%Y-%m-%d')
+    views = views.withColumn("days_ago", datediff(lit(ref_date), col("event_date")))
 
     # Đếm số lượng view hiện tại (current_window) và trước đó (previous_window)
     view_stats = views.groupBy("product_id").agg(
@@ -94,7 +97,8 @@ def build_trending_products(events, orders, order_items, products):
     # 4.2 Xử lý orders & order_items để tính order_growth
     # Chuyển đổi order_date (hoặc order_data nếu file sai chính tả) thành timestamp
     orders = orders.withColumn("order_time", to_timestamp(col("order_date")))
-    orders = orders.withColumn("days_ago", datediff(current_date(), col("order_time")))
+    ref_date = current_time().strftime('%Y-%m-%d')
+    orders = orders.withColumn("days_ago", datediff(lit(ref_date), col("order_time")))
 
     # Join orders với order_items
     order_details = orders.join(order_items, on="order_id", how="inner")
@@ -133,9 +137,10 @@ def build_trending_products(events, orders, order_items, products):
     # 4.4 Thêm thông tin required (trend_window, trend_date)
     trending_df = trending_df.withColumn("trend_window", lit("7d"))
     # Chuyển thời gian hiện tại thành timestamp millis cho Cassandra
+    ref_time_ms = int(current_time().timestamp() * 1000)
     trending_df = trending_df.withColumn(
         "trend_date", 
-        (current_timestamp().cast("double") * 1000).cast("long")
+        lit(ref_time_ms)
     )
 
     # Join để đảm bảo chỉ lấy các sản phẩm tồn tại trong bảng products (Nếu cần thiết)

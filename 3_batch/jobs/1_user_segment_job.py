@@ -13,7 +13,8 @@ from pyspark.sql import SparkSession
 # pyspark.sql = module xử lý dữ liệu dạng bảng (DataFrame)
 
 # 1.2.
-from pyspark.sql.functions import col, when, sum, count, current_date, datediff, to_date
+from pyspark.sql.functions import col, when, sum, count, current_date, datediff, to_date, lit
+from common.utils import current_time
 # pyspark.sql.functions:
 # - Chứa hàng trăm hàm xử lý dữ liệu DataFrame.
 # Ví dụ:
@@ -23,6 +24,7 @@ from pyspark.sql.functions import col, when, sum, count, current_date, datediff,
 #   count()         -> đếm
 #   current_date()  -> ngày hiện tại
 #   datediff()      -> tính số ngày chênh lệch
+
 #
 # Vì import * nên phía dưới dùng trực tiếp:
 #   col(...)
@@ -173,9 +175,10 @@ def build_features(users, orders):
         "days_since_signup",
 
         # sử dụng hàm datediff để trừ
-        # ngày hiện tại -> tới ngày trong bảng
-        datediff(current_date(), col("signup_date"))
+        # ngày hiện tại (mô phỏng 2025-11-14) -> tới ngày trong bảng
+        datediff(lit(current_time().strftime('%Y-%m-%d')), col("signup_date"))
     )
+
 
     # 3 tính cột đơn hàng tệ và hoàn thành
     # dùng groupBy để gom tất cả order theo user

@@ -7,6 +7,10 @@ import pandas as pd
 from datetime import datetime, timezone
 import os
 import sys
+# Add root path to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from utils.utils import current_time
+
 
 # =========================================================
 print("Program started!", flush=True)
@@ -136,7 +140,7 @@ trending_df["trend_score"] = (
 
 # Thêm các field tĩnh
 trending_df["trend_window"] = "7d"
-trending_df["trend_date"] = int(datetime.now().timestamp() * 1000)
+trending_df["trend_date"] = int(current_time().timestamp() * 1000)
 
 # Lọc các sản phẩm có điểm xu hướng lớn hơn 0 và sắp xếp
 trending_df = trending_df[trending_df["trend_score"] > 0]
