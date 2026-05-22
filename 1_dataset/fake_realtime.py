@@ -16,14 +16,14 @@ KAFKA_BROKER = 'my-cluster-kafka-bootstrap:9092'  # Địa chỉ Kafka Broker ch
 TOPIC_NAME = 'user_events'       # Tên topic bạn sẽ gửi dữ liệu vào
 # DATA_PATH = './raw_data/ecommerce_dataset/events.csv' 
 # # Đường dẫn file dữ liệu
-DATA_PATH = 'D:/clone clone/Big_data/1_dataset/raw_data/ecommerce_dataset/events.csv'
+DATA_PATH = './1_dataset/raw_data/ecommerce_dataset/events.csv'
 DELAY_SECONDS = 2                # "n" giây giả lập mỗi hành động
 
 def json_serializer(data):
     """Hàm để convert dữ liệu sang định dạng JSON và encode thành bytes"""
     return json.dumps(data).encode('utf-8')
 
-def start_simulation():
+def start_simulation(): 
     # 2. Khởi tạo Kafka Producer
     try:
         producer = KafkaProducer(
@@ -45,6 +45,7 @@ def start_simulation():
         print(f"--- Lỗi đọc file: {e} ---")
         return
 
+    # 4. Vòng lặp giả lập realtime
     # 4. Vòng lặp giả lập realtime
     print(f"--- Bắt đầu giả lập. Tần suất: {DELAY_SECONDS}s/event ---")
     start_sim_time = current_time()
