@@ -9,6 +9,10 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import os
 import sys
+# Add root path to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from utils.utils import current_time
+
 
 # 2 load data từ local
 # 2.1. kiểm tra path
@@ -48,7 +52,7 @@ else: # nếu file ko tồn tại
     
 
 
-today = datetime.now(timezone.utc).date() #timezone.utc lấy ngày ko lấy giờ
+today = current_time().date()
 
 # 3 tính
 # ý tưởng dùng KMeans để chia phân khúc khách hàng
