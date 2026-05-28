@@ -1,0 +1,37 @@
+{
+  "type": "record",
+  "name": "EcommerceEvent",
+  "namespace": "ecommerce.stream",
+  "doc": "Su kien hanh vi nguoi dung tren ecommerce (view, cart, wishlist, purchase)",
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string",
+      "doc": "ID cua su kien (vi du: E00000001)"
+    },
+    {
+      "name": "user_id",
+      "type": "string",
+      "doc": "ID nguoi dung (vi du: U009798)"
+    },
+    {
+      "name": "product_id",
+      "type": "string",
+      "doc": "ID san pham (vi du: P001393)"
+    },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": ["cart", "view", "wishlist", "purchase"]
+      },
+      "doc": "Loai su kien"
+    },
+    {
+      "name": "event_timestamp",
+      "type": "string",
+      "doc": "Thoi gian su kien theo chuan ISO 8601 (vi du: 2025-07-08T14:28:55.893919)"
+    }
+  ]
+}
