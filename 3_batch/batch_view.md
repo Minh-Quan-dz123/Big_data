@@ -8,11 +8,15 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
 
 | field | mô tả |
 |------|--------|
-| user_id | id của người dùng (ví dụ: U001, U002) |
-| segment_id | id của phân khúc khách hàng (ví dụ: S01, S03) |
-| segment_name | tên phân khúc mà người dùng thuộc về (ví dụ: Frequent Buyer, Low Purchase, Discount Hunter, New User) |
-| assigned_date | ngày hệ thống gán người dùng vào phân khúc  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000) |
-
+| user_id | id của người dùng (ví dụ: 101, 102) |
+| days_since_signup | số ngày từ khi user đăng ký đến hiện tại |
+| total_orders | tổng số đơn hàng của user |
+| total_completed_orders | số đơn hàng có trạng thái completed |
+| total_bad_orders | số đơn hàng bị cancelled hoặc returned |
+| completion_rate | tỷ lệ đơn hàng hoàn thành = completed / total_orders |
+| cancellation_rate | tỷ lệ đơn hàng xấu = (cancelled + returned) / total_orders |
+| cluster | id cụm do KMeans gán (ví dụ: 0, 1, 2, 3) |
+| segment_name | tên phân khúc khách hàng (Frequent Shoppers, Risky Frequent Buyers, Low Frequency, Bad Customer) |
 ---
 
 ### 2. Bảng user_consumption_profile – bản mô tả hành vi mua sắm / thói quen tiêu dùng:
@@ -20,38 +24,36 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
 | field | mô tả |
 |------|--------|
 | user_id | id của người dùng (ví dụ: U001, U002) |
-| avg_order_value | giá trị trung bình của mỗi đơn hàng (ví dụ: 350000) |
-| monthly_spending | tổng số tiền trung bình chi tiêu mỗi tháng (ví dụ: 1200000) |
-| user_behavior | danh mục sản phẩm thường mua hoặc quan tâm nhiều nhất (ví dụ: Electronics, Clothing) |
-
+| avg_order_value | giá trị đơn hàng trung bình của user (chỉ tính order completed) |
+| monthly_spending | tổng chi tiêu của user trong tháng gần nhất |
+|product_ids_in_latest_month|
+| products_in_latest_month | danh sách tên sản phẩm user đã mua trong tháng gần nhất |
+| categories_in_latest_month | danh sách danh mục sản phẩm user đã mua trong tháng gần nhất |
+| product_prices_in_latest_month | danh sách giá các sản phẩm user đã mua trong tháng gần nhất |
 ---
 
 ### 3. trending_products – danh sách sản phẩm đang nổi bật theo xu hướng:
 
 | field | mô tả |
 |------|--------|
-| product_id | id sản phẩm (ví dụ: P001, P002) |
-| trend_score | điểm xu hướng tổng hợp, thể hiện mức “hot” (ví dụ: 95.2) |
-| view_growth | mức tăng trưởng lượt xem (ví dụ: 3.8) |
-| order_growth | mức tăng trưởng số lượng đơn hàng (ví dụ: 4.1) |
-| trend_window | cửa sổ thời gian tính xu hướng (ví dụ: 7d, 30d) |
-| trend_date | ngày hệ thống ghi nhận & cập nhật xu hướng  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000) |
-
+| product_id | id của sản phẩm |
+| trend_score | điểm “hot” của sản phẩm (kết hợp view + order + growth) |
+| view_growth | mức tăng trưởng lượt xem (7 ngày gần nhất so với 7 ngày trước đó) |
+| order_growth | mức tăng trưởng số lượng bán (7 ngày gần nhất so với 7 ngày trước đó) |
+| trend_window | cửa sổ thời gian tính trend (ví dụ: "7d") |
+| trend_date | thời điểm tính trend (timestamp dạng milliseconds) |
 ---
 
 ### 4. Product_Similarity – danh sách sản phẩm tương tự có thể thay thế cho nhau:
 
 | field | mô tả |
 |------|--------|
-| product_id_1 | id sản phẩm gốc (ví dụ: P001) |
-| product_id_2 | id sản phẩm tương đồng (ví dụ: P045, P078, P120) |
-| similarity_score | điểm độ tương đồng (ví dụ: 0.93, 0.87, 0.79) |
-| similarity_type | phương pháp/loại tương đồng: |
-|  | - content based  : dựa trên tên, mô tả, brand, category, giá |
-|  | - collaborative  : dựa vào hành vi mua cùng/quan tâm cùng |
-|  | - hybrid         : kết hợp cả hai |
-| category_match | cùng danh mục hay không (true/false) |
-| computed_date | ngày tính toán tương đồng  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000) |
+| product_id_1 | id sản phẩm thứ nhất trong cặp so sánh |
+| product_id_2 | id sản phẩm thứ hai trong cặp so sánh |
+| similarity_score | điểm tương đồng giữa 2 sản phẩm (0 → 1+) |
+| similarity_type | loại similarity (content_based / collaborative / hybrid) |
+| category_match | true nếu 2 sản phẩm cùng category, false nếu khác |
+| computed_date | thời điểm hệ thống tính similarity |
 
 ---
 
@@ -59,18 +61,14 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
 
 | field | mô tả |
 |------|--------|
-| product_id_1 | id sản phẩm gốc (ví dụ: P000001) |
-| product_id_2 | id sản phẩm bổ trợ / mua kèm |
-| relationship_type | loại quan hệ: |
-|  | - co_purchase   : mua cùng nhau |
-|  | - cross_sell    : bán chéo |
-|  | - hybrid        : kết hợp cả hai |
-| co_purchase_count | số lần mua cùng nhau (ví dụ: 45, 128) |
-| confidence | độ tin cậy = Co_purchase_count / order(A) (ví dụ: 0.41, 0.67) |
-| category_cross_sell | có khác danh mục hay không (TRUE / FALSE) |
-| complementary_score | điểm đánh giá mức độ bổ trợ (ví dụ: 0.82, 0.91) |
-| computed_date | ngày tính toán  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000) |
-
+| Product_id_1 | sản phẩm A (antecedent trong luật FP-Growth) |
+| Product_id_2 | sản phẩm B (consequent trong luật FP-Growth) |
+| Relationship_type | loại quan hệ (luôn là "co_purchase") |
+| Co_purchase_count | số lần 2 sản phẩm được mua cùng nhau |
+| Confidence | xác suất mua B khi đã mua A |
+| Category_cross_sell | true nếu 2 sản phẩm khác category (cross-sell) |
+| Complementary_score | điểm gợi ý sản phẩm bổ sung (0 → 1+) |
+| Computed_date | thời điểm chạy pipeline (timestamp ms) |
 ---
 
 ### 6. user_recommendations_batch – kết luận các sản phẩm gợi ý cho người dùng:

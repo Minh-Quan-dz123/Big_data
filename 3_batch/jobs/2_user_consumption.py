@@ -178,6 +178,7 @@ def build_user_consumption_profile(users,orders,order_items,products):
     # 4.9 GOM TOÀN BỘ SẢN PHẨM TRONG THÁNG GẦN NHẤT
     top_behavior = behavior_df.groupBy("user_id"
     ).agg(
+        collect_list("product_id").alias("product_ids_in_latest_month"),
         collect_list("product_name").alias("products_in_latest_month"),
         collect_list("category").alias("categories_in_latest_month"),
         collect_list("price").alias("product_prices_in_latest_month")
@@ -233,6 +234,7 @@ def save_to_cassandra(df):
         "user_id",
         "avg_order_value",
         "monthly_spending",
+        "product_ids_in_latest_month",
         "products_in_latest_month",
         "categories_in_latest_month",
         "product_prices_in_latest_month"

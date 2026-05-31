@@ -131,8 +131,8 @@ def build_product_complementary(order_items, products):
 
     # tách product id
     rules_1_1 = rules_1_1 \
-        .withColumn("Product_id_1", col("antecedent")[0]) \
-        .withColumn("Product_id_2", col("consequent")[0])
+        .withColumn("product_id_1", col("antecedent")[0]) \
+        .withColumn("product_id_2", col("consequent")[0])
 
     # =====================================================
     # 4.4 ENRICH CATEGORY
@@ -141,16 +141,16 @@ def build_product_complementary(order_items, products):
     prod_category = products.select("product_id", "category")
 
     rules_1_1 = rules_1_1.join(
-        prod_category.withColumnRenamed("product_id", "Product_id_1")
+        prod_category.withColumnRenamed("product_id", "product_id_1")
                      .withColumnRenamed("category", "cat_1"),
-        on="Product_id_1",
+        on="product_id_1",
         how="left"
     )
 
     rules_1_1 = rules_1_1.join(
-        prod_category.withColumnRenamed("product_id", "Product_id_2")
+        prod_category.withColumnRenamed("product_id", "product_id_2")
                      .withColumnRenamed("category", "cat_2"),
-        on="Product_id_2",
+        on="product_id_2",
         how="left"
     )
 
@@ -161,29 +161,29 @@ def build_product_complementary(order_items, products):
     total_baskets = baskets_df.count()
 
     rules_1_1 = rules_1_1.withColumn(
-        "Relationship_type",
+        "relationship_type",
         lit("co_purchase")
     )
 
     # support * total baskets
     rules_1_1 = rules_1_1.withColumn(
-        "Co_purchase_count",
+        "co_purchase_count",
         (col("support") * lit(total_baskets)).cast("int")
     )
 
     rules_1_1 = rules_1_1.withColumn(
-        "Confidence",
+        "confidence",
         col("confidence").cast("double")
     )
 
     rules_1_1 = rules_1_1.withColumn(
-        "Category_cross_sell",
+        "category_cross_sell",
         col("cat_1") != col("cat_2")
     )
 
     # complementary score = 0.7 * confidence + 0.3 * (lift/10)
     rules_1_1 = rules_1_1.withColumn(
-        "Complementary_score",
+        "complementary_score",
         round(
             (col("confidence") * 0.7) +
             ((col("lift") / 10) * 0.3),
@@ -192,7 +192,7 @@ def build_product_complementary(order_items, products):
     )
 
     rules_1_1 = rules_1_1.withColumn(
-        "Computed_date",
+        "computed_date",
         lit(int(current_time().timestamp() * 1000))
     )
 
@@ -210,14 +210,14 @@ def save_to_cassandra(df):
     logger.info("Saving to Cassandra...")
 
     final_df = df.select(
-        "Product_id_1",
-        "Product_id_2",
-        "Relationship_type",
-        "Co_purchase_count",
-        "Confidence",
-        "Category_cross_sell",
-        "Complementary_score",
-        "Computed_date"
+        "product_id_1",
+        "product_id_2",
+        "relationship_type",
+        "co_purchase_count",
+        "confidence",
+        "category_cross_sell",
+        "complementary_score",
+        "computed_date"
     )
 
     final_df.write \
