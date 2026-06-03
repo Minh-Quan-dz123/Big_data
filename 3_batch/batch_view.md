@@ -77,7 +77,5 @@ Thành phần này chứa các bảng dữ liệu lịch sử của khách hàng
 |------|--------|
 | user_id | id người dùng (ví dụ: U001922) |
 | product_id | id sản phẩm được gợi ý (ví dụ: P001233) |
-| recommendation_score | điểm gợi ý (ví dụ: 0.87, 0.95) |
-| recommendation_type | loại gợi ý (content_based, collaborative, hybrid) |
-| reason_tag | lý do hoặc nhãn giải thích (ví dụ: bought_together, similar_category) |
-| computed_date | ngày tính toán gợi ý  (ví dụ: 2026-04-09T08:04:50 -> chuyển thành 1775721890000) |
+| final_score | điểm gợi ý cuối cùng sau khi kết hợp độ liên quan sản phẩm và độ hot xu hướng (ví dụ: 0.87, 0.95) |
+| type | loại nguồn gợi ý gồm: consumption, similar, complementary |
