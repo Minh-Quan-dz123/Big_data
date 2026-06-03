@@ -1,16 +1,19 @@
 # Big Data Recommendation System Dashboard Design
 
-## 1. Mục tiêu
-- 2 Dashboard được xây dựng nhằm trực quan hóa các kết quả xử lý của hệ thống Big Data Recommendation System.
+## Mục tiêu trình diễn đồ án
 
-Dashboard phục vụ hai nhóm người dùng:
+1. Mô phỏng những ứng dụng mà hệ thống cung cấp 
 
-- 1. Customer
+2. Chứng minh khả năng xử lý dữ liệu lớn và phân tích dữ liệu realtime của hệ thống.
+
+Dashboard phục vụ hai nhóm người dùng (Hai Dashboard):
+
+- **Customer**
   - 1 Theo dõi hành vi người dùng.
   - 2 Hiển thị gợi ý sản phẩm realtime.
   - 3 Hiển thị sản phẩm đang hot.
 
-- 2. Seller 
+- **Seller**
   - 1 Tìm kiếm khách hàng tiềm năng cho từng sản phẩm.
   - 2 Theo dõi xu hướng sản phẩm realtime (của 1 sản phẩm làm đó)
   - 3 Phân tích hành vi mua sắm của khách hàng.
@@ -356,9 +359,3 @@ GET /api/products/{product_id}/potential-customers
 GET /api/trending/{product_id}/history
 
 ---
-
-# Mục tiêu trình diễn đồ án
-
-1. Mô phỏng những ứng dụng mà hệ thống cung cấp 
-
-2. Chứng minh khả năng xử lý dữ liệu lớn và phân tích dữ liệu realtime của hệ thống.
