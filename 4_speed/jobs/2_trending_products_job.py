@@ -1,166 +1,226 @@
 import os
-import sys
 from datetime import datetime
 
-# Set up python paths for local testing
-jobs_dir = os.path.dirname(__file__)
-project_root = os.path.abspath(os.path.join(jobs_dir, '../..'))
-sys.path.append(jobs_dir)
-sys.path.append(project_root)
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, to_timestamp, window, sum, when, lit
+from pyspark.sql.functions import col, from_json, to_timestamp, window, sum, when, lit, desc
 from pyspark.sql.types import StructType, StructField, StringType
+'''
+- Input
+{
+  "event_id": "E1",
+  "user_id": "U123",
+  "product_id": "P456",
+  "category" : clothing
+  "event_type": "view | cart | wishlist | purchase",  (tạm thời ko dùng wishlist)
+  "event_timestamp": 1717240000000, (ms)
+}
 
-from configs import config
-from common.utils import current_time
+- Output
+product_id | category | view_count | cart_count | purchase_count | trend_score | computed_time
+'''
+# 1. CONFIG
+KAFKA_BROKER = "localhost:9092"
+INPUT_TOPIC = "user_activity_events"
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
-IS_PRODUCTION = False
+CASSANDRA_CONF = {
+    "host": "cassandra",
+    "keyspace": "ecommerce",
+    "table": "trending_products_realtime"
+}
 
-# Cassandra Config
-CASSANDRA_KEYSPACE = "ecommerce"
-CASSANDRA_TABLE = "trending_products_realtime"
-CASSANDRA_HOST = "cassandra"
 
-# Local Output path
-LOCAL_OUTPUT_FILE = "1_dataset/output/trending_products_realtime.csv"
-
-# Static data paths
-PRODUCTS_CSV_PATH = "1_dataset/raw_data/products.csv"
-
-# Kafka config
-KAFKA_BOOTSTRAP_SERVERS = config.KAFKA_BROKER
-INPUT_TOPIC = config.EVENT_CLEANED_TOPIC
-
-# ==========================================
-# 2. SPARK SESSION INITIALIZATION
-# ==========================================
+# 2. KHỞI TẠO OBJECT SPARK STREAMING
 def get_spark_session():
-    builder = SparkSession.builder \
-        .appName("TrendingProductsRealtimeStream")
-    
-    if IS_PRODUCTION:
-        builder = builder \
-            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1,"
-                                           "com.datastax.spark:spark-cassandra-connector_2.12:3.4.1") \
-            .config("spark.cassandra.connection.host", CASSANDRA_HOST)
-    else:
-        builder = builder \
-            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1")
-            
-    spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
-    return spark
+    return SparkSession.builder \
+        .appName("Realtime_User_Interest_Lightweight") \
+        .config("spark.jars.packages",
+                "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,"
+                "com.datastax.spark:spark-cassandra-connector_2.12:3.3.0") \
+        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
+        .getOrCreate()
 
-# ==========================================
-# 3. FOREACH BATCH WRITER
-# ==========================================
-def write_batch(df, batch_id):
-    print(f"--- Processing Batch: {batch_id} at {datetime.now()} ---")
-    
-    sorted_df = df.orderBy(col("trend_score").desc())
-    sorted_df.show(10, truncate=False)
-    
-    if IS_PRODUCTION:
-        print(f"Writing batch {batch_id} to Cassandra table {CASSANDRA_KEYSPACE}.{CASSANDRA_TABLE}...")
-        sorted_df.write \
-            .format("org.apache.spark.sql.cassandra") \
-            .options(table=CASSANDRA_TABLE, keyspace=CASSANDRA_KEYSPACE) \
-            .mode("append") \
-            .save()
-    else:
-        print(f"Saving batch {batch_id} to local CSV at {LOCAL_OUTPUT_FILE}...")
-        os.makedirs(os.path.dirname(LOCAL_OUTPUT_FILE), exist_ok=True)
-        pandas_df = sorted_df.toPandas()
-        pandas_df.to_csv(LOCAL_OUTPUT_FILE, index=False)
-        print(f"Local file updated successfully (Total items: {len(pandas_df)})")
+# 3. Hàm lưu dữ liệu vào cassandra
+def write_to_cassandra(batch_df, batch_id):
+    print(f"Writing batch: {batch_id}")
 
-# ==========================================
+    # sort window mới nhất + trend_score cao nhất (nhưng vẫn phải sort trong storage level - Cassandra)
+    sorted_df = batch_df.orderBy(
+        col("window_end").desc(),
+        col("trend_score").desc()
+    )
+
+    sorted_df.write \
+        .format("org.apache.spark.sql.cassandra") \
+        .mode("append") \
+        .options(
+            table=CASSANDRA_CONF["table"],
+            keyspace=CASSANDRA_CONF["keyspace"]
+        ) \
+        .save()
+    
+
 # 4. MAIN FLOW
-# ==========================================
 def run_realtime_trend_pipeline():
+
+    # 1 tạo spark object
     spark = get_spark_session()
+
     
-    print(f"Loading static products from {PRODUCTS_CSV_PATH}...")
-    static_products = spark.read \
-        .option("header", "true") \
-        .option("inferSchema", "true") \
-        .csv(PRODUCTS_CSV_PATH) \
-        .select("product_id", "category")
-    
+    # 2 tạo kafka schema
     event_schema = StructType([
         StructField("event_id", StringType(), True),
         StructField("user_id", StringType(), True),
         StructField("product_id", StringType(), True),
+        StructField("category", StringType(), True),
         StructField("event_type", StringType(), True),
         StructField("event_timestamp", StringType(), True),
-        StructField("processed_at", StringType(), True)
     ])
     
-    print(f"Connecting to Kafka at {KAFKA_BOOTSTRAP_SERVERS}, topic: {INPUT_TOPIC}...")
+    # 3 DAG kafka stream
     kafka_stream = spark.readStream \
         .format("kafka") \
-        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+        .option("kafka.bootstrap.servers", KAFKA_BROKER) \
         .option("subscribe", INPUT_TOPIC) \
         .option("startingOffsets", "latest") \
         .load()
     
+    # Bóc tách JSON  sang DataFrame (vẫn chỉ là DAG)
+    # chuyển event_timestamp sang dạng s và chuyển sang dạng time của spark
     parsed_stream = kafka_stream \
-        .selectExpr("CAST(value AS STRING) as json_payload") \
-        .select(from_json(col("json_payload"), event_schema).alias("data")) \
-        .select("data.*")
-        
-    stream_with_time = parsed_stream \
-        .withColumn("event_time", to_timestamp(col("event_timestamp")))
+        .select(from_json(col("value").cast("string"), event_schema).alias("data")) \
+        .select("data.*") \
+        .withColumn("event_timestamp", (col("event_timestamp") / 1000).cast("timestamp"))
+    '''
+    event_id
+    user_id
+    product_id
+    category
+    event_type
+    event_timestamp # dạng timestamp chuẩn
     
-    enriched_stream = stream_with_time.join(
-        static_products,
-        on="product_id",
-        how="inner"
-    )
+    - Logic, giả sử mỗi spark mỗi 1-5s nó đọc 1 nhóm event từ kafka 1 lượt
+    - số lượng event mỗi lần đọc là khác nhau, ví dụ lần này có đọc 5 event
+    {"event_id":"E1","user_id":"U1","product_id":"P1","category":"clothing","event_type":"view","event_timestamp":1717240000000}
+    {"event_id":"E2","user_id":"U2","product_id":"P1","category":"clothing","event_type":"cart","event_timestamp":1717240100000}
+    {"event_id":"E3","user_id":"U3","product_id":"P1","category":"clothing","event_type":"view","event_timestamp":1717240200000}
+    {"event_id":"E4","user_id":"U4","product_id":"P1","category":"clothing","event_type":"purchase","event_timestamp":1717240300000}
+    {"event_id":"E5","user_id":"U5","product_id":"P2","category":"clothing","event_type":"view","event_timestamp":1717240150000}
+
+    - sau khi parse ta được DataFrame
+    event_id | product_id | event_type | event_timestamp
+    E1       | P1         | view       | 1717240000000
+    E2       | P1         | cart       | 1717240100000
+    E3       | P1         | view       | 1717240200000
+    E4       | P1         | purchase   | 1717240300000
+    E5       | P2         | view       | 1717240150000
+
+    - sau đó chuyển event_timestamp dạng ms -> sang  dạng 2024-06-01 10:00:00
+    event_id | product_id | event_type | event_timestamp
+    E1       | P1         | view       | 2024-06-01 10:00:00
+    E2       | P1         | cart       | 2024-06-01 10:01:40
+    E3       | P1         | view       | 2024-06-01 10:03:20
+    E4       | P1         | purchase   | 2024-06-01 10:05:00
+    E5       | P2         | view       | 2024-06-01 10:02:30
+
+    - sau đó Spark sẽ xem event này thuộc những window nào thì sẽ cập nhật vào các window đó 
+    - với 5 event trên spark sẽ cập nhật vào 5 window sau 
+    - Bước 5, window aggragetion window(col("event_timestamp"), "5 minutes", "1 minute")
+        + Đầu tiên Spark sẽ tạo các window 
+            E1, E2, E3, E5 -> window1 (10:00 -> 10:05) 
+            E2, E3, E4, E5 -> window2 (10:01 -> 10:06)
+            E3, E4, E5     -> window3 (10:02 -> 10:07)
+            E3, E4         -> window4 (10:03 -> 10:08)
+            E4             -> window5 (10:04 -> 10:09)
+        + sau đó nó Group by sau:
+            (W1, P1, clothing) // các event_type khác nhau hoặc giống nhau thì kệ
+            (W1, P2, clothing)
+            (W2, P1, clothing)
+            (W2, P2, clothing)
+            (W3, P1, clothing)
+            (W3, P2, clothing)
+            (W4, P1, clothing)
+            (W5, P1, clothing)
+            và rồi nó sẽ tính với mỗi (W_i, P_j, category) thêm cột view_count, cart_count, purchase_count
+        - ví dụ 
+        windowed_aggregates = 
+            window | product | view | cart | purchase
+ {10:00,10:05}     | P1      | 2    | 1    | 0
+ {10:01,10:06}     | P1      | 2    | 1    | 1
+            ..     | P1      | 2    | 1    | 1
+            W4     | P1      | 2    | 1    | 0
+            W5     | P1      | 1    | 0    | 0
+            W1     | P2      | 1    | 0    | 0
+....
+
+    cho ra kết quả 
+    P1: view_count: 2, cart_count: 1, purchase_count: 1
+    P2: view_count: 1, cart_countL 0, purchase_count: 0
+
+    - Bước 6, tính trend_score
+    product	score	computed_time
+        P1	1.9	10:06
+        P1	1.2	10:07
+        P2	0.2	10:06
     
-    windowed_aggregates = enriched_stream \
-        .withWatermark("event_time", "10 minutes") \
-        .groupBy(
-            window(col("event_time"), "5 minutes", "1 minute"),
+        => ta lấy window mới nhất là 10:07 (10:02->10:07)
+
+    - Bước 7: sort (window + score)
+    product	window	score 
+        P3	10:07	2.5
+        P1	10:07	1.2
+        P1	10:06	1.9
+    '''
+    # 5 window aggragetion
+    # mỗi 1 phút, tính lại hành vi của sản phẩm trong 5 phút gần nhất
+    # event đến muộn hơn 10 phút thì bỏ qua
+    windowed_aggregates = (
+        parsed_stream
+        .withWatermark("event_timestamp", "10 minutes") 
+        .groupBy( # group theo từng sản phẩm
+            window(col("event_timestamp"), "5 minutes", "1 minute"), # cú pháp (cột, kích thước window, cửa sổ trượt)
             col("product_id"),
             col("category")
-        ) \
+        ) 
         .agg(
             sum(when(col("event_type") == "view", 1).otherwise(0)).alias("view_count"),
             sum(when(col("event_type") == "cart", 1).otherwise(0)).alias("cart_count"),
             sum(when(col("event_type") == "purchase", 1).otherwise(0)).alias("purchase_count")
         )
+    )
         
+    # trend score
     trending_realtime = windowed_aggregates \
         .withColumn(
             "trend_score",
             col("view_count") * 0.2 + col("cart_count") * 0.5 + col("purchase_count") * 1.0
         ) \
+        .withColumn( # thêm vào để sort theo thời gian
+            "window_end",
+            col("window.end")
+        ) \
         .withColumn(
-            "computed_time",
-            col("window.end").cast("long") * 1000
+            "computed_time", col("window.end").cast("long") * 1000
         ) \
         .select(
-            col("product_id"),
-            col("trend_score"),
-            col("view_count"),
-            col("cart_count"),
-            col("purchase_count"),
-            col("category"),
-            col("computed_time")
+            "product_id",
+            "category",
+            "view_count",
+            "cart_count",
+            "purchase_count",
+            "trend_score",
+            "computed_time"
         )
         
+    # output stream
     query = trending_realtime.writeStream \
-        .foreachBatch(write_batch) \
+        .foreachBatch(write_to_cassandra) \
         .outputMode("update") \
-        .option("checkpointLocation", "4_speed/checkpoint/trending_realtime") \
+        .option("checkpointLocation", "/tmp/checkpoint_trending_products") \
         .start()
-        
+
     query.awaitTermination()
+
 
 if __name__ == "__main__":
     run_realtime_trend_pipeline()
