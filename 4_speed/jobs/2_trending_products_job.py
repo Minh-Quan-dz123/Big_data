@@ -4,13 +4,13 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, to_timestamp, window, sum, when, lit, desc
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 '''
 - Input
 {
-  "event_id": "E1",
   "user_id": "U123",
   "product_id": "P456",
+  "product_name": "ABC",
   "category" : clothing
   "event_type": "view | cart | wishlist | purchase",  (tạm thời ko dùng wishlist)
   "event_timestamp": 1717240000000, (ms)
@@ -20,7 +20,7 @@ from pyspark.sql.types import StructType, StructField, StringType
 product_id | category | view_count | cart_count | purchase_count | trend_score | computed_time
 '''
 # 1. CONFIG
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = "my-cluster-kafka-bootstrap:9092"
 INPUT_TOPIC = "user_activity_events"
 
 CASSANDRA_CONF = {
@@ -44,13 +44,7 @@ def get_spark_session():
 def write_to_cassandra(batch_df, batch_id):
     print(f"Writing batch: {batch_id}")
 
-    # sort window mới nhất + trend_score cao nhất (nhưng vẫn phải sort trong storage level - Cassandra)
-    sorted_df = batch_df.orderBy(
-        col("window_end").desc(),
-        col("trend_score").desc()
-    )
-
-    sorted_df.write \
+    batch_df.write \
         .format("org.apache.spark.sql.cassandra") \
         .mode("append") \
         .options(
@@ -69,12 +63,12 @@ def run_realtime_trend_pipeline():
     
     # 2 tạo kafka schema
     event_schema = StructType([
-        StructField("event_id", StringType(), True),
         StructField("user_id", StringType(), True),
         StructField("product_id", StringType(), True),
+        StructField("product_name", StringType(), True),
         StructField("category", StringType(), True),
         StructField("event_type", StringType(), True),
-        StructField("event_timestamp", StringType(), True),
+        StructField("event_timestamp", LongType(), True),
     ])
     
     # 3 DAG kafka stream
@@ -92,9 +86,9 @@ def run_realtime_trend_pipeline():
         .select("data.*") \
         .withColumn("event_timestamp", (col("event_timestamp") / 1000).cast("timestamp"))
     '''
-    event_id
     user_id
     product_id
+    product_name
     category
     event_type
     event_timestamp # dạng timestamp chuẩn
@@ -204,6 +198,7 @@ def run_realtime_trend_pipeline():
         ) \
         .select(
             "product_id",
+            "product_name"
             "category",
             "view_count",
             "cart_count",

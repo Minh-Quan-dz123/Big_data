@@ -7,14 +7,15 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType
 {
   "user_id": "U123",
   "product_id": "P456",
+  "product_name": "ABC",
+  "category" : clothing
   "event_type": "view",
   "event_time": 1717240000000, (ms)
-  "session_id": "S789"
 }
 
 - Output
-  + (user_id, product_id, event_type, event_timestamp, session_id, computed_score)
- ví dụ: U123 | P456 | view | 1717240000000 | S789 | 0.1832
+  + (user_id, product_id, product_name, category, event_type, event_timestamp, computed_score)
+ ví dụ: U123 | P456      | ABC        | clothing   |view     | 1717240000000   | 0.1832
 '''
 
 # 0 cấu hình ban đầu 
@@ -44,20 +45,21 @@ print("--- Bắt đầu tiến trình Real-time View (Tốc độ cao - Không J
 kafka_schema = StructType([
     StructField("user_id", StringType(), True),       # chuỗi
     StructField("product_id", StringType(), True),    # chuỗi
+    StructField("product_name", StringType(), True),    # chuỗi
+    StructField("category", StringType(), True),    # chuỗi
     StructField("event_type", StringType(), True),    # chuỗi
     StructField("event_timestamp", LongType(), True),      # kiểu long
-    StructField("session_id", StringType(),True)     # Chuỗi
 ])
 
 
 # 1.2. Đọc luồng kafka (đây chỉ là DAG)
 # format: nguồn dữ liệu là kafka
 # option1: địa chỉ kafka
-# option2: đăng ký topic là user_events
+# option2: đăng ký topic là user_activity_events
 # load() = tạo DataFrame Streaming
 df_kafka_stream = spark.readStream \
     .format("kafka") \
-    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("kafka.bootstrap.servers", "my-cluster-kafka-bootstrap:9092") \
     .option("subscribe", "user_activity_events") \
     .load()
 # sau khi load()
@@ -120,9 +122,10 @@ df_final_realtime = df_weighted \
     .select(
         col("user_id"),
         col("product_id"),
+        col("product_name"),
+        col("category"),
         col("event_type"),
         col("event_timestamp"),
-        col("session_id"),
         col("computed_score")
     )
 

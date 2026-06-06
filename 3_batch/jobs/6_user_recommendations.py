@@ -85,7 +85,10 @@ def create_spark():
 # 5 hàm load data từ input
 def load_data(spark):
     # 5.1 spark lấy data từ minIO
-    # ko cần
+    products = spark.read \
+        .option("header", True) \
+        .option("inferSchema", True) \
+        .csv(INPUT_PATH + "products.csv")
 
     # 5.2 spark lấy dữ liệu ở cassandra
     logger.info("Loading datasets from Cassandra...")
@@ -121,6 +124,14 @@ def load_data(spark):
             table="product_complementary"
         ) \
         .load()
+    
+    user_segment = spark.read \
+        .format("org.apache.spark.sql.cassandra") \
+        .options(
+            keyspace="ecommerce",
+            table="user_segment"
+        ) \
+        .load()
 
     logger.info("All datasets loaded successfully")
 
@@ -128,7 +139,9 @@ def load_data(spark):
         "user_consumption_profile": user_consumption_profile,
         "trending_products": trending_products,
         "product_similarity": product_similarity,
-        "product_complementary": product_complementary
+        "product_complementary": product_complementary,
+        "user_segment": user_segment,
+        "products": products
     }
 
 
@@ -148,6 +161,7 @@ type[product] = product complementary = 0.7
 
 output
 | user_id | id người dùng (ví dụ: U001922) |
+| segment_name| Phân khúc khách hàng ở bảng
 | product_id | id sản phẩm được gợi ý (ví dụ: P001233) |
 | recommendation_score | điểm gợi ý (ví dụ: 0.87, 0.95) |
 | recommendation_type | loại gợi ý (consumption, similar, Complementary, trend) |
@@ -266,7 +280,32 @@ def build_user_recommendation(data):
         row_number().over(window_s)
     ).filter(col("stt") == 1).drop("stt") # xóa cột phụ, chỉ giữ lại cột 1 trong mỗi patition
 
-    result = user_recommendation.select(col("user_id"), col("product_id"), col("type"), col("final_score"))
+    result_0 = user_recommendation.select(col("user_id"), col("product_id"), col("type"), col("final_score"))
+
+    # 6.5.5. Cuối cùng join để lấy bảng user_segment
+    result = (
+        result_0.alias("r")
+        .join(
+            data.user_segment.alias("u"),
+            col("r.user_id") == col("u.user_id"),
+            "left"
+        )
+        .join(
+            data.products.alias("p"),
+            col("r.product_id") == col("p.product_id"),
+            "left"
+        )
+        .select(
+            col("r.user_id"),
+            col("u.segment_name"),
+            col("r.product_id"),
+            col("p.product_name"),
+            col("p.category"),
+            col("r.final_score").alias("recommendation_score"),
+            col("r.type").alias("recommendation_type"),
+            current_timestamp().alias("computed_date")
+        )
+    )
     return result
     
 
