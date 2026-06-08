@@ -1,7 +1,3 @@
-import os
-from datetime import datetime
-
-
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, to_timestamp, window, sum, when, lit, desc
 from pyspark.sql.types import StructType, StructField, StringType, LongType

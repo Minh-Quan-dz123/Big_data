@@ -148,7 +148,7 @@ def recommendation(user_id: str):
     # khai báo query
     query = """
         SELECT segment_name, product_id, product_name, category, recommendation_score, recommendation_type
-        FROM user_recommendation_batch
+        FROM user_recommendations_batch
         WHERE user_id=%s
     """
     # gọi hàm và đợi nó trả về các hàng kết quả

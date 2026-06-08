@@ -14,7 +14,6 @@ from pyspark.sql import SparkSession
 
 # 1.2.
 from pyspark.sql.functions import col, when, sum, count, current_date, datediff, to_date, lit
-from common.utils import current_time
 # pyspark.sql.functions:
 # - Chứa hàng trăm hàm xử lý dữ liệu DataFrame.
 # Ví dụ:
@@ -72,6 +71,10 @@ from pyspark.ml.clustering import KMeans
 from datetime import datetime # - Thư viện thời gian của Python
 import logging  # in log
 import sys # thao tác với hệ thống Python
+
+from datetime import datetime
+def current_time() -> datetime: #2025-11-14 23:18:00
+    return datetime(2025, 11, 14, 23, 18, 0)
 
 
 # 2. CẤU HÌNH 

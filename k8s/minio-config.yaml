@@ -8,9 +8,9 @@ spec:
     app: minio            # service sẽ chọn các pod có tên label
   ports:                  # cổng Servicee
     - name: api           # là tên định danh cổng backend (tự đặt)
-      port: 9000          # cổng backend của MinIO bên ngoài cluster (Service)
-      targetPort: 9000    # cổng trong container MinIO
-      nodePort: 30090     # cổng ngoài máy
+      port: 9000          # port trong service
+      targetPort: 9000    # chuyển request vào container port 9000
+      nodePort: 30090     # cổng ngoài máy http://<NodeIP>:30090
     - name: console       # tên cổng khác là cổng UI
       port: 9001          # tương tự
       targetPort: 9001
@@ -33,7 +33,7 @@ spec:
     spec:
       containers:         # cấu hình container trong pod
         - name: minio
-          image: minio/minio:latest # dùng image MinIO mới nhất
+          image: minio/minio:4.0.0  #minio/minio:latest lấy từ dockerHub
           args:                     # chạy lệnh minio server và các dạng ở dưới
             - server
             - http://minio-{0...3}.minio.default.svc.cluster.local/data 

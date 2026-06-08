@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service           # khai báo đây là 1 service
 metadata:
-  name: cassandra       # đặt tên Service để dễ nhận biết
+  name: cassandra       # tự đặt tên Service để dễ nhận biết
 spec:                   # cấu hình Service
   clusterIP: None       # Hay là Headless Service <=> ko tạo IP ảo (ClusterIP)=> cho Phép pod truy cập trực tiếp nhau
   selector:
@@ -11,7 +11,7 @@ spec:                   # cấu hình Service
       name: cql         # đặt tên port là cql
 ---
 apiVersion: apps/v1
-kind: StatefulSet       # StatefulSet = máy chạy dữ liệu
+kind: StatefulSet       # là loại controller đặc biệt cho database, kafka, cassandra, hệ thống cần state
 metadata:
   name: cassandra       # tên của StatefulSet
 spec:
@@ -19,11 +19,11 @@ spec:
   replicas: 3           # nên dùng 3 node
   selector:             # StatefulSet quản lý các Pod có label là cassandra
     matchLabels:
-      app: cassandra
+      app: cassandra    # nó sẽ quản lý pod có label là cassandra
   template:             # Template để tạo pod: 
     metadata:           # Gán label cho Pod → để Service + StatefulSet nhận diện
       labels:
-        app: cassandra
+        app: cassandra  # gắn label cho pod để service chọn pod và statefulSet quản lý pod
     spec:               
       containers:       # danh sách container trong Pod
         - name: cassandra
@@ -39,8 +39,8 @@ spec:
             - name: HEAP_NEWSIZE
               value: "128M"
             - name: CASSANDRA_SEEDS
-              value: "cassandra-0.cassandra.default.svc.cluster.local"
-            - name: CASSANDRA_CLUSTER_NAME
+              value: "cassandra-0.cassandra.default.svc.cluster.local" # node đầu tiên làm gốc
+            - name: CASSANDRA_CLUSTER_NAME                             # tên của cluster
               value: "K8sCluster"
             - name: CASSANDRA_DC
               value: "DC1"
@@ -49,7 +49,7 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/cassandra # lưu dữ liệu tại /var/lib/cassandra
-  volumeClaimTemplates:     # mỗi Pod sẽ có PVC riêng (storage riêng)
+  volumeClaimTemplates:     # PVC tự động, mỗi pod 1 ổ cứng riêng
     - metadata:
         name: data
       spec:

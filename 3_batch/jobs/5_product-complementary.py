@@ -21,7 +21,6 @@ from pyspark.ml.fpm import FPGrowth
 from pyspark.sql.window import Window
 
 from datetime import datetime
-from common.utils import current_time
 import logging
 import sys
 
@@ -176,7 +175,7 @@ def build_product_complementary(order_items, products):
 
     rules_1_1 = rules_1_1.withColumn(
         "computed_date",
-        lit(int(current_time().timestamp() * 1000))
+        lit(int(current_timestamp().timestamp() * 1000))
     )
 
     logger.info("Feature engineering completed")

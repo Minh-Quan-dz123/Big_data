@@ -14,10 +14,22 @@ spec:
     spec:
       containers:
         - name: airflow
-          image: airflow-batch   # image bạn build
+          image: minhquan-airflow-batch:latest   # image bạn build
           ports:
             - containerPort: 8080
-          command: ["airflow", "standalone"]
+          command: ["bash", "-c"]
+          args:
+            - airflow db migrate &&
+              airflow scheduler &
+              airflow webserver
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+      volumes:
+        - name: dags
+          hostPath:
+            path: /opt/airflow/dags
+
 ---
 apiVersion: v1
 kind: Service

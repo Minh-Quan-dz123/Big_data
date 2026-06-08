@@ -26,7 +26,6 @@ from datetime import datetime
 import logging
 import sys
 
-from common.utils import current_time
 
 # 2. CONFIG
 INPUT_PATH = "s3a://datalake/processed/"

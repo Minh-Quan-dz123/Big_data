@@ -1,9 +1,20 @@
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: csv-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
 kind: Service             # tạo 1 Service tên spark-master
 metadata:
-  name: spark-master
+  name: spark-master      # name của service
   labels:
-    app: spark-master
+    app: spark-master     # Gắn label để dễ quản lý.
 spec:                     # cấu hình
   type: NodePort          # để truy cập UI từ máy host (Kind)
   ports:
@@ -20,7 +31,7 @@ spec:                     # cấu hình
 apiVersion: apps/v1
 kind: Deployment          # chạy Spark Master
 metadata:                 
-  name: spark-master      
+  name: spark-master   
   labels:
     app: spark-master
 spec:
@@ -36,7 +47,7 @@ spec:
       enableServiceLinks: false  # Tắt tính năng tự động inject các biến môi trường từ Service vào container.
       containers:
         - name: spark-master
-          image: apache/spark:3.4.1
+          image: minhquan-spark-image:latest # dùng image custom
           command:
             [
               "/opt/spark/bin/spark-class", # launcher của Spark
@@ -48,15 +59,19 @@ spec:
           env:                      # bắt Spark chạy foreground (ko chạy nền)
             - name: SPARK_NO_DAEMONIZE
               value: "true"
+            - name: SPARK_MASTER_HOST
+              value: spark-master
+            - name: SPARK_LOCAL_IP
+              value: spark-master
           resources:
             requests:
               cpu: "500m"     # 0.5CPU
               memory: "512Mi"
           volumeMounts:
-            - name: data-volume
-              mountPath: /opt/spark/data
+             - name: data
+               mountPath: /opt/spark/data
       volumes:
-        - name: data-volume
+        - name: data
           persistentVolumeClaim:
             claimName: csv-data-pvc
 ---
@@ -77,15 +92,15 @@ spec:                       # cấu hình
         app: spark-worker
     spec:                   # cấu hình pod
       initContainers:
-      - name: wait-for-master
+      - name: wait-master
         image: busybox
         command:
           - sh
           - -c
-          - "until nslookup spark-master; do echo waiting; sleep 2; done"
+          - "until nc -z spark-master 7077; do echo waiting; sleep 2; done"
       containers:
         - name: spark-worker
-          image: apache/spark:3.4.1
+          image: minhquan-spark-image:latest
           command:
             [
               "/opt/spark/bin/spark-class",            # launcher của Spark
@@ -94,10 +109,12 @@ spec:                       # cấu hình
             ]
           env:
             - name: SPARK_WORKER_MEMORY
-              value: "1g"
+              value: "2g"
             - name: SPARK_WORKER_CORES
-              value: "1"                  # 1 CPU
+              value: "2"                  # 1 CPU
+            - name: SPARK_NO_DAEMONIZE
+              value: "true"
           resources:
             requests:
-              cpu: "1000m"
-              memory: "1Gi"
+              cpu: "2000m"
+              memory: "2Gi"

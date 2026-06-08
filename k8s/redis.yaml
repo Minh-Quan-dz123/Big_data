@@ -13,10 +13,15 @@ spec:
         app: redis
     spec:
       containers:
-      - name: redis
-        image: redis:7
-        ports:
-        - containerPort: 6379
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+
 ---
 apiVersion: v1
 kind: Service
@@ -26,5 +31,5 @@ spec:
   selector:
     app: redis
   ports:
-  - port: 6379
-    targetPort: 6379
+    - port: 6379
+      targetPort: 6379

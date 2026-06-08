@@ -1,5 +1,5 @@
 apiVersion: kafka.strimzi.io/v1 # version API của strimzi
-kind: KafkaNodePool             # khai báo nóm các node
+kind: KafkaNodePool             # khai báo nhóm các node chạy kafka
 metadata:
   name: kafka-pool
   labels:
@@ -18,7 +18,7 @@ kind: Kafka
 #   └── KafkaNodePool (các node chạy cluster)
 
 metadata:
-  name: my-cluster
+  name: my-cluster    # có thể tự mình đặt tên
   annotations:
     strimzi.io/node-pools: enabled  #dùng KafkaNodePool
     strimzi.io/kraft: enabled   # dùng Kraft mode, ko cần Zookeeper
@@ -29,13 +29,13 @@ spec:
 
     listeners:                  # cổng kết nối
       - name: external          # tên listener
-        port: 9092              # cổng kafka
+        port: 9092              # cổng kafka broker sẽ lắng nghe ở đây, chỉ các pod trong kubernetes cluster dùng được trực tiếp
         #type: internal         # chỉ cho phép truy cập trong cluster kubernetes
         type: nodeport          # cho phép bên ngoài và trong đều truy cập
         tls: false              # ko mã hóa
         configuration:
           bootstrap:
-            nodePort: 30092       # port cố định bạn muốn
+            nodePort: 30092     # port ngoài cluster: NodeIP
 
     config:
       offsets.topic.replication.factor: 1
@@ -47,3 +47,16 @@ spec:
   entityOperator:               # Operator quản lý Kafka trong kubernetes;
     topicOperator: {}           # tự tạo/sửa/xóa kafka topic
     userOperator: {}            # quản lý kafka user + quyền ACL
+---
+# topic 1
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: user_activity_events
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 3
+  replicas: 1
+---
+

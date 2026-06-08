@@ -11,8 +11,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, count, sum, when, current_date, datediff, to_timestamp, lit, coalesce, current_timestamp
 )
+
+
 from datetime import datetime
-from common.utils import current_time
+def current_time() -> datetime:
+    return datetime(2025, 11, 14, 23, 18, 0)
 
 import logging
 import sys
