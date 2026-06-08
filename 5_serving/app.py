@@ -96,8 +96,11 @@ def event(event: dict):
     }
 
     # 2 gọi hàm send là được
-    producer.send("user_activity_events", kafka_event)
-
+    try:
+        producer.send("user_activity_events", kafka_event)
+        producer.flush()
+    except Exception as e:
+        raise HTTPException(500, str(e))
     # Lưu ý: khi send thì client ko gửi ngay lập tức xuống broker mà đưa vào buffer trong RAM
     # 1 thread nền sẽ gom nhiều message lại thành batch rồi mới gửi tới kafka broker
     
@@ -152,7 +155,12 @@ def recommendation(user_id: str):
         WHERE user_id=%s
     """
     # gọi hàm và đợi nó trả về các hàng kết quả
-    rows = session.execute(query, [user_id]) # trong query có user_id=%s, đó là nhập tham số
+    rows = list(session.execute(query, [user_id])) # trong query có user_id=%s, đó là nhập tham số
+# ---------------KO đảm bảo ranking ---------------------
+    if not rows:
+        raise HTTPException(404, "No data")
+
+    segment_name = rows[0].segment_name
 
     # 4 gán các row trong rows vào 1 mảng json để gửi lại client
     recommendation = []
@@ -168,7 +176,7 @@ def recommendation(user_id: str):
     
     result_final = {
         "user_id": user_id,
-        "segment_name":rows.one().segment_name,
+        "segment_name":segment_name,
         "recommendations": recommendation
     }
 
@@ -239,7 +247,7 @@ def trending():
     metadata = session.execute("""
         SELECT latest_computed_time
         FROM trending_metadata
-        WHERE key='latest'
+        WHERE key='trending_products'
     """).one() # tương đương lấy thời gian gần nhất
 
     if not metadata:
