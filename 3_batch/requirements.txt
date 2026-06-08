@@ -1,0 +1,8 @@
+# Airflow Spark integration
+apache-airflow-providers-apache-spark==4.1.0
+
+# Spark Python API
+pyspark==3.4.1
+
+# optional but safe for S3 usage in python side
+boto3==1.34.0

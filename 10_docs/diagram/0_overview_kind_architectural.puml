@@ -1,0 +1,113 @@
+@startuml minhquan
+title Kubernetes (Kind) Architecture - Clean Version (with Deployment & PVC)
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor User
+
+package "laptop/pc" {
+  component "kubectl CLI" as kubectl
+  component "YAML Files\n(Deployment, Service, ConfigMap, PVC)" as yaml
+  component "Docker Engine" as docker
+}
+
+package "Kind Cluster (Docker Containers)" {
+
+  package "Control Plane Node" {
+    component "API Server" as apiserver
+    component "Scheduler" as scheduler
+    component "Controller Manager" as controller
+    database "etcd" as etcd
+
+    component "Deployment Controller" as deploy_controller
+    component "PVC Controller" as pvc_controller
+  }
+
+  package "Worker Node 1" {
+    component "kubelet" as kubelet1
+    component "containerd" as runtime1
+    component "CNI Plugin\n(Cung cấp mạng cho Pod)" as cni1
+
+    component "Pod A (FastAPI)" as podA
+    component "Pod B (Worker)" as podB
+
+    component "PVC Mount" as pvc_mount1
+  }
+
+  package "Worker Node 2" {
+    component "kubelet" as kubelet2
+    component "containerd" as runtime2
+    component "CNI Plugin\n(Cung cấp mạng cho Pod)" as cni2
+
+    component "Pod C (Redis)" as podC
+
+    component "PVC Mount" as pvc_mount2
+  }
+
+  component "Persistent Volume (PV)" as pv
+}
+
+cloud "Overlay Network (CNI)" as network
+component "Service (ClusterIP)" as service
+component "Deployment" as deployment
+component "PVC (PersistentVolumeClaim)" as pvc
+
+' ================= USER FLOW =================
+User --> kubectl
+kubectl --> apiserver : kubectl apply
+yaml --> kubectl
+
+' ================= CONTROL PLANE =================
+apiserver --> etcd : store state
+apiserver --> scheduler : schedule Pods
+apiserver --> controller : reconcile state
+
+controller --> deploy_controller : manage Deployment
+controller --> pvc_controller : manage PVC
+
+deploy_controller --> apiserver : create/update Pods
+
+' ================= SCHEDULING =================
+scheduler --> kubelet1 : assign Pods
+scheduler --> kubelet2 : assign Pods
+
+' ================= RUNTIME =================
+kubelet1 --> runtime1
+kubelet2 --> runtime2
+
+runtime1 --> podA
+runtime1 --> podB
+runtime2 --> podC
+
+' ================= NETWORK =================
+podA --> network
+podB --> network
+podC --> network
+
+network --> podA
+network --> podB
+network --> podC
+
+' ================= SERVICE =================
+service --> podA
+service --> podB
+service --> podC
+
+' ================= DEPLOYMENT =================
+deployment --> apiserver : create ReplicaSet/Pods
+apiserver --> deployment : status update
+
+' ================= STORAGE (PVC/PV) =================
+pvc --> apiserver : request storage
+apiserver --> pvc_controller : bind PVC
+
+pvc_controller --> pv : bind PersistentVolume
+
+podA --> pvc_mount1 : mount volume
+podC --> pvc_mount2 : mount volume
+
+pvc_mount1 --> pv
+pvc_mount2 --> pv
+
+@enduml

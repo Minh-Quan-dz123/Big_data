@@ -1,37 +1,37 @@
 apiVersion: v1
-kind: Service
+kind: Service           # khai báo đây là 1 service
 metadata:
-  name: cassandra
-spec:
-  clusterIP: None
+  name: cassandra       # tự đặt tên Service để dễ nhận biết
+spec:                   # cấu hình Service
+  clusterIP: None       # Hay là Headless Service <=> ko tạo IP ảo (ClusterIP)=> cho Phép pod truy cập trực tiếp nhau
   selector:
-    app: cassandra
+    app: cassandra      # Service sẽ chọn các Pod cá label là cassandra
   ports:
-    - port: 9042
-      name: cql
+    - port: 9042        # Cổng chuẩn của Cassandra CQL (query SQL-like)
+      name: cql         # đặt tên port là cql
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: StatefulSet       # là loại controller đặc biệt cho database, kafka, cassandra, hệ thống cần state
 metadata:
-  name: cassandra
+  name: cassandra       # tên của StatefulSet
 spec:
-  serviceName: cassandra
-  replicas: 3   # nên dùng 3 node
-  selector:
+  serviceName: cassandra # tên Service đi kèm StatefulSet
+  replicas: 3           # nên dùng 3 node
+  selector:             # StatefulSet quản lý các Pod có label là cassandra
     matchLabels:
-      app: cassandra
-  template:
-    metadata:
+      app: cassandra    # nó sẽ quản lý pod có label là cassandra
+  template:             # Template để tạo pod: 
+    metadata:           # Gán label cho Pod → để Service + StatefulSet nhận diện
       labels:
-        app: cassandra
-    spec:
-      containers:
+        app: cassandra  # gắn label cho pod để service chọn pod và statefulSet quản lý pod
+    spec:               
+      containers:       # danh sách container trong Pod
         - name: cassandra
-          image: cassandra:4.1
+          image: cassandra:4.1  # Docker image Cassandra version 4.1
           ports:
-            - containerPort: 7000
+            - containerPort: 7000   # port để giao tiếp giữa các node
               name: intra-node
-            - containerPort: 9042
+            - containerPort: 9042   # cổng để cho client (backend/app) dùng để query
               name: cql
           env:
             - name: MAX_HEAP_SIZE
@@ -39,8 +39,8 @@ spec:
             - name: HEAP_NEWSIZE
               value: "128M"
             - name: CASSANDRA_SEEDS
-              value: "cassandra-0.cassandra.default.svc.cluster.local"
-            - name: CASSANDRA_CLUSTER_NAME
+              value: "cassandra-0.cassandra.default.svc.cluster.local" # node đầu tiên làm gốc
+            - name: CASSANDRA_CLUSTER_NAME                             # tên của cluster
               value: "K8sCluster"
             - name: CASSANDRA_DC
               value: "DC1"
@@ -48,12 +48,12 @@ spec:
               value: "GossipingPropertyFileSnitch"
           volumeMounts:
             - name: data
-              mountPath: /var/lib/cassandra
-  volumeClaimTemplates:
+              mountPath: /var/lib/cassandra # lưu dữ liệu tại /var/lib/cassandra
+  volumeClaimTemplates:     # PVC tự động, mỗi pod 1 ổ cứng riêng
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
+        accessModes: ["ReadWriteOnce"]   #chỉ 1 node được ghi vào disk này
         resources:
           requests:
             storage: 2Gi

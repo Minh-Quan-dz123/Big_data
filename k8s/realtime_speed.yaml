@@ -1,0 +1,187 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: realtime-config
+data:
+  KAFKA_BROKER: "my-cluster-kafka-bootstrap:9092"
+  KAFKA_TOPIC: "user_activity_events"
+
+  CASSANDRA_HOST: "cassandra"
+  KEYSPACE: "ecommerce"
+
+  TABLE_INTEREST: "realtime_user_interest"
+  TABLE_TRENDING: "trending_products_realtime"
+
+  SPARK_MASTER: "spark://spark-master:7077"
+  CHECKPOINT_BASE: "/checkpoint"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-checkpoint-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-interest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: realtime-interest
+  template:
+    metadata:
+      labels:
+        app: realtime-interest
+    spec:
+      containers:
+        - name: spark-job
+          image: spark-streaming:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/spark/bin/spark-submit"]
+          args:
+            - "--master"
+            - "spark://spark-master:7077"
+
+            - "--deploy-mode"
+            - "client"
+
+            # OPTIMIZED STREAMING CONFIG
+            - "--conf"
+            - "spark.sql.streaming.backpressure.enabled=true"
+
+            - "--conf"
+            - "spark.sql.shuffle.partitions=4"
+
+            - "--conf"
+            - "spark.streaming.kafka.maxRatePerPartition=500"
+
+            - "--conf"
+            - "spark.sql.streaming.stateStore.maintenanceInterval=60s"
+
+            - "--packages"
+            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0"
+
+            - "/app/jobs/1_realtime_interest.py"
+          env:
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: KAFKA_BROKER
+
+            - name: KAFKA_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: KAFKA_TOPIC
+
+            - name: CASSANDRA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: CASSANDRA_HOST
+
+            - name: CHECKPOINT_PATH
+              value: "/checkpoint/interest"
+
+          volumeMounts:
+            - name: checkpoint
+              mountPath: /checkpoint
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+
+      volumes:
+        - name: checkpoint
+          persistentVolumeClaim:
+            claimName: spark-checkpoint-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trending-products
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trending-products
+  template:
+    metadata:
+      labels:
+        app: trending-products
+    spec:
+      containers:
+        - name: spark-job
+          image: spark-streaming:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/spark/bin/spark-submit"]
+          args:
+            - "--master"
+            - "spark://spark-master:7077"
+
+            - "--deploy-mode"
+            - "client"
+
+            # STREAMING OPTIMIZATION
+            - "--conf"
+            - "spark.sql.streaming.backpressure.enabled=true"
+
+            - "--conf"
+            - "spark.sql.shuffle.partitions=4"
+
+            - "--conf"
+            - "spark.streaming.kafka.maxRatePerPartition=500"
+            
+            - "--conf"
+            - "spark.sql.shuffle.partitions=4"
+
+            - "--packages"
+            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0"
+
+            - "/app/jobs/2_trending_products_job.py"
+          env:
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: KAFKA_BROKER
+
+            - name: KAFKA_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: KAFKA_TOPIC
+
+            - name: CASSANDRA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: realtime-config
+                  key: CASSANDRA_HOST
+
+            - name: CHECKPOINT_PATH
+              value: "/checkpoint/trending"
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+
+          volumeMounts:
+            - name: checkpoint
+              mountPath: /checkpoint
+
+      volumes:
+        - name: checkpoint
+          persistentVolumeClaim:
+            claimName: spark-checkpoint-pvc
+

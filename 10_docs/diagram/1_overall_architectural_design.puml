@@ -1,0 +1,52 @@
+@startuml Big_Data
+title Lambda Architecture - Big Data System
+
+skinparam componentStyle rectangle
+
+actor User_External_System
+
+rectangle "Streaming Ingestion Layer" {
+  component "Kafka Cluster\n(my-cluster)" as kafka
+}
+
+rectangle "Stream Processing (Speed Layer)" {
+  component "Spark Streaming Job\n(realtime-interest)" as spark1
+  component "Spark Streaming Job\n(trending-products)" as spark2
+}
+
+rectangle "Batch Processing Layer" {
+  component "Airflow Scheduler" as airflow
+  component "Spark Batch Jobs" as sparkbatch
+}
+
+rectangle "Storage Layer" {
+  database "Cassandra\n(Realtime + Batch Serving DB)" as cassandra
+  database "Redis\n(Cache Layer)" as redis
+  component "MinIO\n(Data Lake / Object Storage)" as minio
+}
+
+rectangle "Serving Layer" {
+  component "Serving API (FastAPI)" as api
+}
+
+' ===== FLOW =====
+User_External_System --> api:HTTP 
+
+
+kafka --> spark1: topic {user_activity_events}
+kafka --> spark2: topic {user_activity_events}
+
+spark1 --> cassandra
+spark2 --> cassandra
+
+
+sparkbatch --> cassandra: write data 
+sparkbatch --> minio: read data 
+
+airflow --> sparkbatch: trigger job (schedule / DAG)
+
+api --> redis: get / set
+api --> cassandra: get
+api --> kafka: topic {user_activity_events}
+
+@enduml

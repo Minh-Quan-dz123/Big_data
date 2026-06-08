@@ -3,6 +3,11 @@ from configs import config
 from datetime import datetime
 import subprocess
 import json
+import sys
+# Add root path to PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from utils.utils import current_time
+
 
 # Kafka
 from confluent_kafka import Consumer, Producer, KafkaError, KafkaException
@@ -77,6 +82,9 @@ def create_producer():
         "bootstrap.servers": config.KAFKA_BROKER,
         "acks": "all",
         "retries": 3,
+        "linger.ms": 5,
+        "compression.type": "snappy"
+        
     }
     return Producer(conf)
 
@@ -104,6 +112,9 @@ def run_stream_cleaning():
     # 2. Khởi tạo producer để gửi dữ liệu sang Kafka (ABC2)
     producer = create_producer()
 
+    start_real_time = datetime.now()
+    start_sim_time = current_time()
+
     try:
         # Loop chạy liên tục để consume stream
         while True:
@@ -130,7 +141,10 @@ def run_stream_cleaning():
                 raw = msg.value().decode("utf-8")
 
                 # Parse JSON string -> dict
-                data = json.loads(raw)
+                data = safe_parse(raw)
+                
+                if data is None:
+                    continue
 
                 print("\n[RAW DATA]", data)
 
@@ -138,8 +152,10 @@ def run_stream_cleaning():
                 # clean_record: hàm xử lý dữ liệu (lọc null, format, chuẩn hóa,...)
                 cleaned = clean_record(data)
 
-                # Thêm timestamp xử lý
-                cleaned["processed_at"] = datetime.now().isoformat()
+                # Thêm timestamp xử lý dựa trên thời gian mô phỏng cộng thời gian trôi qua
+                elapsed = datetime.now() - start_real_time
+                sim_now = start_sim_time + elapsed
+                cleaned["processed_at"] = sim_now.isoformat()
 
                 print("[CLEANED DATA]", cleaned)
 
@@ -172,6 +188,13 @@ def run_stream_cleaning():
         consumer.close()
         producer.flush()
 
+#ext safe_parse_json(json_str):
+def safe_parse(raw):
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        print(f"Invalid JSON: {raw}")
+        return None
 
 # =========================
 # ENTRY POINT
