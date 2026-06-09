@@ -68,6 +68,8 @@ Request
 {
     "user_id": "U1",
     "product_id": "P15",
+    "product_name": "abc",
+    "category" : clothing,
     "event_type": "view" // event_type = view | cart | purchase
 }
 
@@ -116,18 +118,22 @@ Response
 ```json
 {
     "user_id": "U1",
+    "segment_name": Frequent Shoppers | Risky Frequent Buyers | Low Frequency | Bad Customer,
+
     "recommendations": [
         {
             "product_id": "P15",
             "product_name": "Fami",
             "category": "vitamin",
-            "score": 98.3
+            "score": 98.3,
+            "recommendation_type": ABC
         },
         {
             "product_id": "P8",
             "product_name": "iphone 11 pro max",
             "category": "smartphone",
-            "score": 95
+            "score": 95,
+            "recommendation_type": ABC
         }
     ]
 }

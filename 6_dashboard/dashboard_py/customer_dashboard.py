@@ -5,15 +5,17 @@ from streamlit_autorefresh import st_autorefresh
 
 import mock_data
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://localhost:30070"
 REQUEST_TIMEOUT = 5
 
+# 1 Cấu hình UI Streamlit
 st.set_page_config(
-    page_title="Customer Dashboard",
-    layout="wide",
-    initial_sidebar_state="collapsed",
+    page_title="Customer Dashboard",    # tên tab trình duyệt
+    layout="wide",                      # giao diện full width
+    initial_sidebar_state="collapsed",  # ẩn sidebar mặc định
 )
 
+# 2 Tự reload mỗi 5 phút
 st_autorefresh(interval=5 * 60 * 1000, key="auto_refresh")
 
 if "user_id" not in st.session_state:

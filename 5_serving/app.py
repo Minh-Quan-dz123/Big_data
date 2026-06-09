@@ -71,6 +71,7 @@ Ví dụ: Request
 {
     "user_id": "U1",
     "product_id": "P15",
+    "product_name": "abc",
     "category" : clothing,
     "event_type": "view" // event_type = view | cart | purchase
 }
@@ -90,14 +91,18 @@ def event(event: dict):
     kafka_event = {
         "user_id": event["user_id"],
         "product_id": event["product_id"],
+        "product_name": event["product_name"],
         "event_type": event["event_type"],
         "category": event["category"],
         "timestamp": datetime.now(timezone.utc).timestamp()* 1000
     }
 
     # 2 gọi hàm send là được
-    producer.send("user_activity_events", kafka_event)
-
+    try:
+        producer.send("user_activity_events", kafka_event)
+        producer.flush()
+    except Exception as e:
+        raise HTTPException(500, str(e))
     # Lưu ý: khi send thì client ko gửi ngay lập tức xuống broker mà đưa vào buffer trong RAM
     # 1 thread nền sẽ gom nhiều message lại thành batch rồi mới gửi tới kafka broker
     
@@ -152,7 +157,12 @@ def recommendation(user_id: str):
         WHERE user_id=%s
     """
     # gọi hàm và đợi nó trả về các hàng kết quả
-    rows = session.execute(query, [user_id]) # trong query có user_id=%s, đó là nhập tham số
+    rows = list(session.execute(query, [user_id])) # trong query có user_id=%s, đó là nhập tham số
+# ---------------KO đảm bảo ranking ---------------------
+    if not rows:
+        raise HTTPException(404, "No data")
+
+    segment_name = rows[0].segment_name
 
     # 4 gán các row trong rows vào 1 mảng json để gửi lại client
     recommendation = []
@@ -168,7 +178,7 @@ def recommendation(user_id: str):
     
     result_final = {
         "user_id": user_id,
-        "segment_name":rows.one().segment_name,
+        "segment_name":segment_name,
         "recommendations": recommendation
     }
 
@@ -176,7 +186,94 @@ def recommendation(user_id: str):
     cache_set(cache_key, result_final)
     return result_final
 
-# 4.3. client -> server: get thông tin trending
+
+# 4.3 client -> server: get lấy recommendation realtime cho user_id 
+#     server -> cassandra
+''' 
+CREATE TABLE IF NOT EXISTS ecommerce.realtime_user_interest (
+    user_id text,
+    product_id text,
+
+    product_name text,
+    category text,
+
+    event_type text,
+    event_timestamp bigint,
+
+    computed_score float,
+
+    PRIMARY KEY (user_id, product_id)
+);
+ví dụ : GET /api/recommendations_realtime/U1
+Response
+{
+    "user_id": "U1",
+    "recommendations": [
+        {
+            "product_id": "P15",
+            "product_name": "Fami",
+            "category": "vitamin",
+            "score": 98.3,
+            "event_type": ABC
+        },
+        {
+            "product_id": "P8",
+            "product_name": "iphone 11 pro max",
+            "category": "smartphone",
+            "score": 95
+            "event_type": ABC
+        }
+    ]
+}
+'''
+@app.get("/api/recommendations_realtime/{user_id}")
+def recommendation(user_id: str):
+    # 1 lấy dữ liệu trong cache
+    cache_key = f"recommendation_realtime:{user_id}"
+
+    result_cache = cache_get(cache_key)
+
+    # 2 nếu tồn tại thì oke, ko thì set
+    if result_cache:
+        return result_cache
+    
+    # 3 ko thì set dữ liệu từ cassandra vào redis server
+    # 3.1. lấy từ cassandra
+    # khai báo query
+    query = """
+        SELECT product_id, product_name, category, computed_score, event_type
+        FROM realtime_user_interest
+        WHERE user_id=%s
+    """
+    # gọi hàm và đợi nó trả về các hàng kết quả
+    rows = list(session.execute(query, [user_id])) # trong query có user_id=%s, đó là nhập tham số
+# ---------------KO đảm bảo ranking ---------------------
+    if not rows:
+        raise HTTPException(404, "No data")
+
+    # 4 gán các row trong rows vào 1 mảng json để gửi lại client
+    recommendation = []
+
+    for row in rows:
+        recommendation.append({
+            "product_id": row.product_id,
+            "product_name": row.product_name,
+            "category": row.category,
+            "score": row.computed_score,
+            "event_type": row.event_type
+        })
+    
+    result_final = {
+        "user_id": user_id,
+        "recommendations": recommendation
+    }
+
+    # 3.2. Lưu vào redis cái đã
+    cache_set(cache_key, result_final)
+    return result_final
+
+
+# 4.4. client -> server: get thông tin trending
 #     server -> redis, nếu cache miss -> lấy từ cassandra và cập nhật redis
 '''
 ví dụ GET /api/trending
@@ -239,7 +336,7 @@ def trending():
     metadata = session.execute("""
         SELECT latest_computed_time
         FROM trending_metadata
-        WHERE key='latest'
+        WHERE key='trending_products'
     """).one() # tương đương lấy thời gian gần nhất
 
     if not metadata:
@@ -288,7 +385,7 @@ def trending():
 
     return result
 
-# 4.4. client -> server: get ứng với mỗi product, lấy danh sách user 
+# 4.5. client -> server: get ứng với mỗi product, lấy danh sách user 
 # mỗi product có thể bán cho user nào
 # user đó thuộc loại {Low Frequency, Risky Frequent Buyers, Frequent Shoppers, Bad Customer}
 # họ có quan tâm tới sản phẩm này gần đây ko
