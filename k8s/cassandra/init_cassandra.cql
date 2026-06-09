@@ -6,9 +6,9 @@
 CREATE KEYSPACE IF NOT EXISTS ecommerce
 WITH replication = {
   'class': 'NetworkTopologyStrategy',
-  'DC1': 3 # dữ liệu được replicate 3 bản trong DC1
+  'DC1': 3 -- dữ liệu được replicate 3 bản trong DC1
 }
-AND durable_writes = true; # đảm bảo ghi xuống commit log → tránh mất dữ liệu
+AND durable_writes = true; -- đảm bảo ghi xuống commit log → tránh mất dữ liệu
 
 -- 2. USE KEYSPACE
 USE ecommerce;
@@ -104,8 +104,9 @@ CREATE TABLE IF NOT EXISTS ecommerce.user_recommendations_batch (
 
     computed_date timestamp,
 
-    PRIMARY KEY (user_id, product_id)
-) WITH CLUSTERING ORDER BY (recommendation_score DESC);
+    PRIMARY KEY (user_id, recommendation_score, product_id)
+) 
+WITH CLUSTERING ORDER BY (recommendation_score DESC);
 
 -- TABLE 7: REALTIME USER INTEREST
 CREATE TABLE IF NOT EXISTS ecommerce.realtime_user_interest (
@@ -122,9 +123,11 @@ CREATE TABLE IF NOT EXISTS ecommerce.realtime_user_interest (
 
     PRIMARY KEY (user_id, product_id)
 );
+ALTER TABLE ecommerce.realtime_user_interest
+WITH default_time_to_live = 86400;  -- 24 giờ
 
 -- TABLE 8: TRENDING PRODUCTS REALTIME
-CREATE TABLE ecommerce.trending_products_realtime (
+CREATE TABLE IF NOT EXISTS ecommerce.trending_products_realtime (
     computed_time bigint,
     product_id text,
 
@@ -142,6 +145,10 @@ WITH CLUSTERING ORDER BY (
     trend_score DESC,
     product_id ASC
 );
+ALTER TABLE ecommerce.trending_products_realtime
+WITH default_time_to_live = 3600;  -- 1 giờ thôi
+
+
 
 CREATE TABLE ecommerce.trending_metadata (
     key text PRIMARY KEY,

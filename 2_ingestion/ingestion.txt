@@ -44,31 +44,3 @@ ingestion-service/ (các biến cấu hình thì lấy từ 8_config/conf
 ├── batch/
 Dataset -> đọc + clean -> lưu vào HDFS
 │
-├── stream/
-fake_realtime → Kafka topic ABC1
-                      ↓
-               (code này)
-                      ↓
-          clean dữ liệu (clean_record)
-                      ↓
-            Kafka topic ABC2
-     
-#chương trình này có nhiệm vụ 
-'''
-1. sàng lọc dữ liệu để đẩy vào cho batch/data_lake làm kho dữ liệu lịch sử
-   1.1. đọc dữ liệu file phục vụ cho batch layer: order, order_items, products, users, reviews
-   1.2. sàng lọc dữ liệu (đổi tên trường dữ liệu, xóa, thêm,.... nếu cần thiết, ko thì thôi) 
-   trước khi lưu vào HDFS 
-   1.3. Lưu vào HDFS
-2. đọc dữ liệu realtime từ kafka broker
-   2.1. kết nối với kafka broker
-   2.2. đọc dữ liệu từ topic X
-   2.3. sàng lọc dữ liệu (nếu cần)
-   2.4. gửi dữ liệu đã sàng lọc vào topic Y của kafka broker
-   
-=> 2 pipeline trong 1 service
-=> nhớ đọc các bảng dữ liệu ở file word (link để ở zalo)
-'''
-# 1 cài thư viện confluent-kafka (làm việc với kafka) và pyarrow ( làm việc với HDFS)
-# 2 config lấy từ config/config.py
-# 3 nhớ đọc ingestion.txt

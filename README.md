@@ -439,16 +439,15 @@ http://localhost:30070/docs
 ### Customer Dashboard
 
 ```bash
-cd 6_dashboard
+cd 6_dashboard/my-app
 
-pip install -r requirements.txt
+npm install (cài đặt thư viện)
 
-streamlit run customer_dashboard.py
+npm run dev
 ```
-
-### Seller Dashboard
+Sau khi chạy thành công, mở trình duyệt: 
 ```bash
-streamlit run seller_dashboard.py
+http://localhost:5173
 ```
 
 ---
@@ -456,7 +455,7 @@ streamlit run seller_dashboard.py
 
 ## 🧪 Step 7: Generate Realtime Events
 ```bash
-cd 1_dataset
+cd ../fake_realtime
 
 python fake_realtime.py
 ```
@@ -464,7 +463,7 @@ python fake_realtime.py
 Script sẽ:
 
 - Sinh hành vi người dùng giả lập
-- Gửi dữ liệu vào Kafka
+- Gửi dữ liệu vào serving app
 - Kích hoạt pipeline realtime
 
 ---
