@@ -170,7 +170,7 @@ Big_data/
 
 ## Cài đặt công cụ
 
-### 1. Docker
+### 1. Cài Docker Desktop để có WSL2 backend
 ```bash
 docker --version
 ```
@@ -195,6 +195,37 @@ python --version
 ## Notes
 >Đứng ở Big_data/ thực hiện tất cả các lệnh trong thư mục cho các thao tác bên dưới
 ---
+## 🐳 Step 0: Open Docker Desktop
+B1. wsl -l -v để kiểm tra WSL
+```bash
+wsl -l -v
+```
+
+B2a. ví dụ Docker tắt rồi thì sang bước 3
+```bash
+PS D:\Project_BigData\Big_data> wsl -l -v
+  NAME              STATE           VERSION
+* Ubuntu-24.04      Running         2
+  docker-desktop    Stopped         2
+PS D:\Project_BigData\Big_data>
+```
+
+B2b. nếu Docker chưa tắt thì tắt
+```bash
+wsl --terminate docker-desktop
+hoặc
+wsl --shutdown (ko nên nhưng tạm)
+```
+
+B3. Sau đó mở Dockertop để Docker Engine running
+```bash
+wsl -l -v
+thì thấy 
+docker-desktop    Running
+```
+
+
+
 ## ☸️ Step 1: Create Kubernetes Cluster
 
 ### 1.1. Tạo Kubernetes cluster bằng Kind:
@@ -202,7 +233,19 @@ python --version
 ```bash
 kind create cluster --name bigdata-cluster --config k8s/kind-config.yaml
 ```
+Kết quả mong chờ
+```bash
+Creating cluster "bigdata-cluster" ...
+...
+✓ Installing StorageClass 💾
+✓ Joining worker nodes 🚜
+Set kubectl context to "kind-bigdata-cluster"
+You can now use your cluster with:
 
+kubectl cluster-info --context kind-bigdata-cluster
+
+Not sure what to do next? 😅  Check out https://kind.sigs.k8s.io/docs/user/quick-start/
+```
 ### 1.2. Kiểm tra cluster:
 
 ```bash
@@ -213,26 +256,59 @@ kubectl get nodes
 
 - 1 control-plane
 - 3 workers
+```
+PS D:\Project_BigData\Big_data> kubectl get nodes
+NAME                            STATUS   ROLES           AGE     VERSION
+bigdata-cluster-control-plane   Ready    control-plane   2m19s   v1.35.0
+bigdata-cluster-worker          Ready    <none>          2m4s    v1.35.0
+bigdata-cluster-worker2         Ready    <none>          2m4s    v1.35.0
+bigdata-cluster-worker3         Ready    <none>          2m4s    v1.35.0
+```
 ---
 
 ## 🐳 Step 2: Build Docker Images
-
+> Lưu ý có dâu chấm . ở cuối lệnh
 ### 2.1. Spark Image
 
 ```bash
 docker build -f 7_docker/dockerfile.spark -t minhquan-spark-image:latest .
 ```
+Đợi khá lâu tầm 3-7'
+
+```bash
+[+] Building 191.7s (11/11) FINISHED        docker:desktop-linux
+ => [internal] load build definition from dockerfile.spark  0.1s
+ => => transferring dockerfile: 795B                        0.0s
+ => [internal] load metadata for docker.io/apache/spark:3.  6.2s
+ => [internal] load .dockerignore                           0.0s
+ => => transferring context: 2B                             0.0s
+ => [1/6] FROM docker.io/apache/spark:3.4.1@sha256:39976  164.2s
+ => => resolve docker.io/apache/spark
+ ...
+  => => exporting manifest list sha256:7cf6d68205aa93764351  0.1s
+ => => naming to docker.io/library/minhquan-spark-image:la  0.0s
+ => => unpacking to docker.io/library/minhquan-spark-image  1.8s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/xkt0k7suaqswvv4qrc931hiko
+```
+
 ### 2.2. Airflow Image
 
 ```bash
-docker build -f 3_batch/dockerfile.airflow -t minhquan-airflow-batch:latest .
+cd 3_batch
+docker build -f dockerfile.airflow -t minhquan-airflow-batch:latest .
 ```
+Đợi khá lâu tầm 3-8', kết quả na ná khi build spark image
+
+
 ### 2.3. Serving API
 
 ```bash
-docker build -f 5_serving/dockerfile -t serving-api:1.0 .
+cd ../5_serving (Do trước đó cd 3_batch nên giờ lùi lại và chuyển sang context khác )
+docker build -f dockerfile -t serving-api:1.0 .
 ```
 
+Đợi tầm 1-3', kết quả na ná khi build spark image
 ---
 
 ### 2.4. Load Images into Kind
