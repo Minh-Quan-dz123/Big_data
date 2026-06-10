@@ -115,43 +115,13 @@ def create_spark():
     return SparkSession.builder \
         .appName("UserSegmentationJob") \
         .master("spark://spark-master:7077") \
-        .config(
-            "spark.jars",
-            "/opt/spark/jars/hadoop-aws-3.3.4.jar,"
-            "/opt/spark/jars/aws-java-sdk-bundle-1.12.262.jar"
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.endpoint",
-            MINIO_CONF["endpoint"]
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.access.key",
-            MINIO_CONF["access_key"]
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.secret.key",
-            MINIO_CONF["secret_key"]
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.path.style.access",
-            "true"
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.connection.ssl.enabled",
-            "false"
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.impl",
-            "org.apache.hadoop.fs.s3a.S3AFileSystem"
-        ) \
-        .config(
-            "spark.hadoop.fs.s3a.aws.credentials.provider",
-            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
-        ) \
-        .config(
-            "spark.cassandra.connection.host",
-            CASSANDRA_CONF["host"]
-        ) \
+        .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
+        .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
+        .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
+        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
 # 4 BUIL USER SEGMENT

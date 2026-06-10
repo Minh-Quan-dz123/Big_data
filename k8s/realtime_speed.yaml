@@ -4,7 +4,7 @@ metadata:
   name: realtime-config
 data:
   KAFKA_BROKER: "my-cluster-kafka-bootstrap:9092"
-  KAFKA_TOPIC: "user_activity_events"
+  KAFKA_TOPIC: "user-activity-events"
 
   CASSANDRA_HOST: "cassandra"
   KEYSPACE: "ecommerce"
@@ -12,19 +12,29 @@ data:
   TABLE_INTEREST: "realtime_user_interest"
   TABLE_TRENDING: "trending_products_realtime"
 
-  SPARK_MASTER: "spark://spark-master:7077"
   CHECKPOINT_BASE: "/checkpoint"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: spark-checkpoint-pvc
+  name: spark-checkpoint-pvc-interest
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-checkpoint-pvc-trending
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,7 +52,7 @@ spec:
     spec:
       containers:
         - name: spark-job
-          image: spark-streaming:latest
+          image: minhquan-spark-image:latest
           imagePullPolicy: IfNotPresent
           command: ["/opt/spark/bin/spark-submit"]
           args:
@@ -66,9 +76,9 @@ spec:
             - "spark.sql.streaming.stateStore.maintenanceInterval=60s"
 
             - "--packages"
-            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0"
+            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1,com.datastax.spark:spark-cassandra-connector_2.12:3.4.1"
 
-            - "/app/jobs/1_realtime_interest.py"
+            - "/opt/spark/jobs/streaming/1_realtime_interest.py"
           env:
             - name: KAFKA_BROKER
               valueFrom:
@@ -103,7 +113,7 @@ spec:
       volumes:
         - name: checkpoint
           persistentVolumeClaim:
-            claimName: spark-checkpoint-pvc
+            claimName: spark-checkpoint-pvc-interest
 
 ---
 apiVersion: apps/v1
@@ -122,7 +132,7 @@ spec:
     spec:
       containers:
         - name: spark-job
-          image: spark-streaming:latest
+          image: minhquan-spark-image:latest
           imagePullPolicy: IfNotPresent
           command: ["/opt/spark/bin/spark-submit"]
           args:
@@ -141,14 +151,14 @@ spec:
 
             - "--conf"
             - "spark.streaming.kafka.maxRatePerPartition=500"
-            
+
             - "--conf"
-            - "spark.sql.shuffle.partitions=4"
+            - "spark.sql.streaming.stateStore.maintenanceInterval=60s"
 
             - "--packages"
-            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0"
+            - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1,com.datastax.spark:spark-cassandra-connector_2.12:3.4.1"
 
-            - "/app/jobs/2_trending_products_job.py"
+            - "/opt/spark/jobs/streaming/2_trending_products_job.py"
           env:
             - name: KAFKA_BROKER
               valueFrom:
@@ -183,5 +193,5 @@ spec:
       volumes:
         - name: checkpoint
           persistentVolumeClaim:
-            claimName: spark-checkpoint-pvc
+            claimName: spark-checkpoint-pvc-trending
 

@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-master
+  labels:
+    app: spark-master
+spec:
+  ports:
+    - port: 7077
+      name: rpc # Port để Worker và Client kết nối nộp job
+      targetPort: 7077
+    - port: 8080
+      name: web-ui # Port xem Dashboard quản lý
+      targetPort: 8080
+  selector:
+    app: spark-master
+  # type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+  labels:
+    app: spark-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: spark-master
+          image: minhquan-spark-image:latest
+          command:
+            [
+              "/opt/spark/bin/spark-class",
+              "org.apache.spark.deploy.master.Master",
+            ]
+          ports:
+            - containerPort: 7077
+            - containerPort: 8080
+          env:
+            - name: SPARK_NO_DAEMONIZE
+              value: "true" # Giữ container chạy foreground
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-worker
+  labels:
+    app: spark-worker
+spec:
+  replicas: 3 # Chạy 2 Worker để xử lý song song
+  selector:
+    matchLabels:
+      app: spark-worker
+  template:
+    metadata:
+      labels:
+        app: spark-worker
+    spec:
+      containers:
+        - name: spark-worker
+          image: minhquan-spark-image:latest
+          # Worker cần biết địa chỉ Master để đăng ký (spark://spark-master:7077)
+          command:
+            [
+              "/opt/spark/bin/spark-class",
+              "org.apache.spark.deploy.worker.Worker",
+              "spark://spark-master:7077",
+            ]
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi" # Worker cần nhiều RAM để xử lý data
+          env:
+            # - name: SPARK_WORKER_CORES
+            #   value: "1"
+            - name: SPARK_WORKER_MEMORY
+              value: "1g" # RAM thực tế cấp cho các Executor bên trong Worker
+            # - name: SPARK_NO_DAEMONIZE
+            #   value: "true"

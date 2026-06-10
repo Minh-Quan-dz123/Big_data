@@ -47,26 +47,20 @@ spec:
       enableServiceLinks: false  # Tắt tính năng tự động inject các biến môi trường từ Service vào container.
       containers:
         - name: spark-master
-          image: minhquan-spark-image:latest # dùng image custom
+          image: apache/spark:3.4.1     #   minhquan-spark-image:latest # dùng image custom
           command:
-            [
-              "/opt/spark/bin/spark-class", # launcher của Spark
-              "org.apache.spark.deploy.master.Master" # chạy chế độ Spark Master thật, các name ở trên chỉ là tự đặt
-            ]
+            - /opt/spark/bin/spark-class
+            - org.apache.spark.deploy.master.Master
           ports:                    # khai báo 2 port
             - containerPort: 7077
             - containerPort: 8080
           env:                      # bắt Spark chạy foreground (ko chạy nền)
             - name: SPARK_NO_DAEMONIZE
               value: "true"
+
             - name: SPARK_MASTER_HOST
-              value: spark-master
-            - name: SPARK_LOCAL_IP
-              value: spark-master
-          resources:
-            requests:
-              cpu: "500m"     # 0.5CPU
-              memory: "512Mi"
+              value: "spark-master"
+
           volumeMounts:
              - name: data
                mountPath: /opt/spark/data
@@ -100,7 +94,8 @@ spec:                       # cấu hình
           - "until nc -z spark-master 7077; do echo waiting; sleep 2; done"
       containers:
         - name: spark-worker
-          image: minhquan-spark-image:latest
+          image: apache/spark:3.4.1
+          imagePullPolicy: IfNotPresent
           command:
             [
               "/opt/spark/bin/spark-class",            # launcher của Spark
@@ -114,6 +109,7 @@ spec:                       # cấu hình
               value: "2"                  # 1 CPU
             - name: SPARK_NO_DAEMONIZE
               value: "true"
+            
           resources:
             requests:
               cpu: "2000m"

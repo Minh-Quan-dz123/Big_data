@@ -18,6 +18,12 @@ redis_client  = redis.Redis(
     decode_responses=True                    # False => trả về byte (b'abc') còn true trả về string ("abc")
 )
 
+try:
+    redis_client.ping()
+    print("Redis connected successfully")
+except Exception as e:
+    print(f"Redis connection failed: {e}")
+
 # 2.2. cassandra client
 CASSANDRA_CONF = {
     "host": "cassandra",
@@ -34,7 +40,7 @@ session = cluster.connect(CASSANDRA_CONF["keyspace"])
 # 2.3. cấu hình kafka client
 # tạo object
 producer = KafkaProducer(
-    bootstrap_servers="kafka:9092",
+    bootstrap_servers="my-cluster-kafka-bootstrap:9092",
     value_serializer=lambda v: json.dumps(v).encode("utf-8")
 )
 
@@ -94,12 +100,12 @@ def event(event: dict):
         "product_name": event["product_name"],
         "event_type": event["event_type"],
         "category": event["category"],
-        "timestamp": datetime.now(timezone.utc).timestamp()* 1000
+        "event_timestamp": datetime.now(timezone.utc).timestamp()* 1000
     }
 
     # 2 gọi hàm send là được
     try:
-        producer.send("user_activity_events", kafka_event)
+        producer.send("user-activity-events", kafka_event)
         producer.flush()
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -227,7 +233,7 @@ Response
 }
 '''
 @app.get("/api/recommendations_realtime/{user_id}")
-def recommendation(user_id: str):
+def recommendations_realtime(user_id: str):
     # 1 lấy dữ liệu trong cache
     cache_key = f"recommendation_realtime:{user_id}"
 

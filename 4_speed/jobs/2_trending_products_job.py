@@ -16,8 +16,8 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType
 product_id | category | view_count | cart_count | purchase_count | trend_score | computed_time
 '''
 # 1. CONFIG
-KAFKA_BROKER = "my-cluster-kafka-bootstrap:9092"
-INPUT_TOPIC = "user_activity_events"
+KAFKA_BROKER = "my-cluster-kafka-bootstrap.default.svc.cluster.local:9092"
+INPUT_TOPIC = "user-activity-events"
 
 CASSANDRA_CONF = {
     "host": "cassandra",
@@ -30,9 +30,6 @@ CASSANDRA_CONF = {
 def get_spark_session():
     return SparkSession.builder \
         .appName("Realtime_User_Interest_Lightweight") \
-        .config("spark.jars.packages",
-                "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,"
-                "com.datastax.spark:spark-cassandra-connector_2.12:3.3.0") \
         .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
@@ -170,6 +167,7 @@ def run_realtime_trend_pipeline():
         .groupBy( # group theo từng sản phẩm
             window(col("event_timestamp"), "5 minutes", "1 minute"), # cú pháp (cột, kích thước window, cửa sổ trượt)
             col("product_id"),
+            col("product_name"),
             col("category")
         ) 
         .agg(
@@ -194,7 +192,7 @@ def run_realtime_trend_pipeline():
         ) \
         .select(
             "product_id",
-            "product_name"
+            "product_name",
             "category",
             "view_count",
             "cart_count",
@@ -207,7 +205,7 @@ def run_realtime_trend_pipeline():
     query = trending_realtime.writeStream \
         .foreachBatch(write_to_cassandra) \
         .outputMode("update") \
-        .option("checkpointLocation", "/tmp/checkpoint_trending_products") \
+        .option("checkpointLocation", "/checkpoint/interest") \
         .start()
 
     query.awaitTermination()

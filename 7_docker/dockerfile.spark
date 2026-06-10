@@ -1,24 +1,56 @@
-# 1 lấy image có sẵn của Spark version 3.4.1 từ Docker Hub
+# 1. Base Spark image
 FROM apache/spark:3.4.1
 
-# 2 chuyển sang user root ( chạy container với quyền admin)
+# 2. Root để cài package + copy file hệ thống
 USER root
 
-RUN apt-get update && apt-get install -y curl && apt-get clean
+RUN apt-get update && \
+    apt-get install -y curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# 3 copy jars chung
-COPY 3_batch/jars/ /opt/spark/jars/
+# 3 các thư viện để spark làm việc với minio, cassandra, kafka
+# 3.1. MINIO / S3A SUPPORT
+RUN curl -fSL -o /opt/spark/jars/hadoop-aws-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar && \
+    curl -fSL -o /opt/spark/jars/aws-java-sdk-bundle-1.12.262.jar \
+    https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
 
-# 4 copy tất cả jobs (batch + streaming)
-COPY 3_batch/jobs/ /opt/spark/jobs/
-COPY 4_speed/jobs/ /opt/spark/jobs/
+# 3.2. CASSANDRA CONNECTOR
+RUN curl -fSL -o /opt/spark/jars/spark-cassandra-connector-assembly_2.12-3.4.1.jar \
+    https://repo1.maven.org/maven2/com/datastax/spark/spark-cassandra-connector-assembly_2.12/3.4.1/spark-cassandra-connector-assembly_2.12-3.4.1.jar
 
-# 5. Set PYTHONPATH để fix lỗi import
-# cái này để nói với python rằng hãy coi thư mục /opt/spark/batch/job là nơi có thể import module
+# 3.3. kafka
+RUN curl -fSL -o /opt/spark/jars/spark-sql-kafka-0-10_2.12-3.4.1.jar \
+    https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.12/3.4.1/spark-sql-kafka-0-10_2.12-3.4.1.jar && \
+    curl -fSL -o /opt/spark/jars/spark-token-provider-kafka-0-10_2.12-3.4.1.jar \
+    https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.4.1/spark-token-provider-kafka-0-10_2.12-3.4.1.jar && \
+    curl -fSL -o /opt/spark/jars/kafka-clients-3.4.1.jar \
+    https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.4.1/kafka-clients-3.4.1.jar && \
+    curl -fSL -o /opt/spark/jars/commons-pool2-2.11.1.jar \
+    https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.11.1/commons-pool2-2.11.1.jar
+
+
+# 4. Copy source code jobs (batch + streaming)
+COPY 3_batch/jobs/ /opt/spark/jobs/batch/
+COPY 4_speed/jobs/ /opt/spark/jobs/streaming/
+
+# 5. Fix Python import path
 ENV SPARK_HOME=/opt/spark
-ENV PYTHONPATH=/opt/spark/jobs
+ENV PYTHONPATH=/opt/spark/jobs:/opt/spark/jobs/batch:/opt/spark/jobs/streaming
 
-# 6. Set working directory, spark đỡ phải cd
+# 6. (OPTIONAL nhưng nên có) tối ưu Spark env
+ENV PYTHONUNBUFFERED=1
+
+# 7. Working directory
 WORKDIR /opt/spark
 
+# 8
+RUN mkdir -p /home/spark/.ivy2/cache && \
+    mkdir -p /home/spark/.ivy2/jars && \
+    chown -R spark:spark /home/spark
+
+ENV SPARK_SUBMIT_OPTS="-Divy.home=/tmp/ivy"
+
+# 9. Trở lại user spark (an toàn hơn root)
 USER spark

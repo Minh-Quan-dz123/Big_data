@@ -10,7 +10,7 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType
   "product_name": "ABC",
   "category" : clothing
   "event_type": "view",
-  "event_time": 1717240000000, (ms)
+  "event_timestamp": 1717240000000, (ms)
 }
 
 - Output
@@ -29,9 +29,6 @@ CASSANDRA_CONF = {
 # KHỞI TẠO OBJECT SPARK STREAMING
 spark = SparkSession.builder \
     .appName("Realtime_User_Interest_Lightweight") \
-    .config("spark.jars.packages",
-            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,"
-            "com.datastax.spark:spark-cassandra-connector_2.12:3.3.0") \
     .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
     .getOrCreate()
 
@@ -59,8 +56,9 @@ kafka_schema = StructType([
 # load() = tạo DataFrame Streaming
 df_kafka_stream = spark.readStream \
     .format("kafka") \
-    .option("kafka.bootstrap.servers", "my-cluster-kafka-bootstrap:9092") \
-    .option("subscribe", "user_activity_events") \
+    .option("kafka.bootstrap.servers", "my-cluster-kafka-bootstrap.default.svc.cluster.local:9092") \
+    .option("subscribe", "user-activity-events") \
+    .option("startingOffsets", "latest") \
     .load()
 # sau khi load()
 ''', DataFrame là df_kafka_stream có dạng
@@ -149,7 +147,7 @@ def write_to_cassandra(batch_df, batch_id):
 query = df_final_realtime.writeStream \
     .outputMode("append") \
     .foreachBatch(write_to_cassandra) \
-    .option("checkpointLocation", "/tmp/checkpoint_realtime_user_interest") \
+    .option("checkpointLocation", "/checkpoint/interest") \
     .start()
 
 query.awaitTermination()

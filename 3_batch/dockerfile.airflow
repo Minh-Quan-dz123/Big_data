@@ -20,8 +20,9 @@ ENV SPARK_HOME=/opt/spark
 USER airflow
 
 # 6 install dependencies
-COPY requirements.txt /requirements.txt
+COPY 3_batch/requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
 
-# 7 copy dags
-COPY dags/ /opt/airflow/dags/
+# 7 copy dags và jobs code
+COPY 3_batch/dags/ /opt/airflow/dags/
+COPY 3_batch/jobs/ /opt/spark/jobs/batch/

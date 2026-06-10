@@ -273,7 +273,7 @@ bigdata-cluster-worker3         Ready    <none>          2m4s    v1.35.0
 ```bash
 docker build -f 7_docker/dockerfile.spark -t minhquan-spark-image:latest .
 ```
-Đợi khá lâu tầm 3-7'
+Đợi khá lâu tầm 3-8'
 
 ```bash
 [+] Building 191.7s (11/11) FINISHED        docker:desktop-linux
@@ -295,8 +295,7 @@ View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux
 ### 2.2. Airflow Image
 
 ```bash
-cd 3_batch
-docker build -f dockerfile.airflow -t minhquan-airflow-batch:latest .
+docker build -f 3_batch/dockerfile.airflow -t minhquan-airflow-batch:latest .
 ```
 Đợi khá lâu tầm 3-8', kết quả na ná khi build spark image
 
@@ -304,7 +303,7 @@ docker build -f dockerfile.airflow -t minhquan-airflow-batch:latest .
 ### 2.3. Serving API
 
 ```bash
-cd ../5_serving (Do trước đó cd 3_batch nên giờ lùi lại và chuyển sang context khác )
+cd 5_serving 
 docker build -f dockerfile -t serving-api:1.0 .
 ```
 
@@ -315,18 +314,26 @@ docker build -f dockerfile -t serving-api:1.0 .
 
 #### 2.4.1. Spark Image
 ```bash
+cd ../
 kind load docker-image minhquan-spark-image:latest --name bigdata-cluster
 ```
+Đợi tầm 4-8'
+
 
 #### 2.4.2. Airflow Image
 ```bash
 kind load docker-image minhquan-airflow-batch:latest --name bigdata-cluster
 ```
+Đợi tầm 5-10'
+
 
 #### 2.4.3. Serving AP
 ```bash
 kind load docker-image serving-api:1.0 --name bigdata-cluster
 ```
+Đợi tầm 30s-2'
+
+
 
 ## 📦 Step 3: Deploy Infrastructure
 
@@ -338,9 +345,19 @@ kind load docker-image serving-api:1.0 --name bigdata-cluster
 kubectl create -f https://strimzi.io/install/latest?namespace=default
 ```
 
+kết quả
+```bash
+...
+customresourcedefinition.apiextensions.k8s.io/kafkamirrormaker2s.kafka.strimzi.io created
+customresourcedefinition.apiextensions.k8s.io/kafkatopics.kafka.strimzi.io created
+serviceaccount/strimzi-cluster-operator created
+```
+
 #### 3.1.2. Đợi Operator khởi động:
 ```bash
 kubectl get pods
+NAME                                        READY   STATUS    RESTARTS   AGE
+strimzi-cluster-operator-57856f5f9b-7pvk4   1/1     Running   0          86s
 ```
 
 #### 3.1.3. Deploy Kafka Cluster:
@@ -348,6 +365,21 @@ kubectl get pods
 kubectl apply -f k8s/kafka-config.yaml
 ```
 
+Kết quả
+```bash
+kafkanodepool.kafka.strimzi.io/kafka-pool unchanged
+kafka.kafka.strimzi.io/my-cluster unchanged
+kafkatopic.kafka.strimzi.io/user-activity-events created
+
+PS D:\Project_BigData\Big_data> kubectl get svc
+NAME                                  TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)                      AGE
+kubernetes                            ClusterIP   10.96.0.1      <none>        443/TCP                      10h
+my-cluster-kafka-bootstrap            ClusterIP   10.96.75.169   <none>        9091/TCP                     20m
+my-cluster-kafka-brokers              ClusterIP   None           <none>        9090/TCP,9091/TCP,8443/TCP   20m
+my-cluster-kafka-external-bootstrap   NodePort    10.96.245.25   <none>        9092:30092/TCP               20m
+my-cluster-kafka-pool-external-0      NodePort    10.96.145.33   <none>        9092:32580/TCP               20m
+PS D:\Project_BigData\Big_data>
+```
 ---
 
 ### 3.2. MinIO
@@ -356,11 +388,31 @@ kubectl apply -f k8s/kafka-config.yaml
 kubectl apply -f k8s/minio-config.yaml
 ```
 
+Kết quả
+```bash
+service/minio created
+statefulset.apps/minio created
+```
+
 #### 3.2.2. Kiểm tra trạng thái
 ```bash
 kubectl get pods
+NAME                                          READY   STATUS             RESTARTS      AGE
+minio-0                                       0/1     ContainerCreating   0             31s
+...
+PS D:\Project_BigData\Big_data>
 ```
+Đợi 1-3' nếu đây là lần đầu vì nó cần pull image về nữa 
 
+Kết quả
+```bash
+kubectl get pods
+NAME                                          READY   STATUS    RESTARTS      AGE
+minio-0                                       1/1     Running   0             3m49s
+minio-1                                       1/1     Running   0             3m23s
+minio-2                                       1/1     Running   0             2m53s
+minio-3                                       1/1     Running   0             2m12s
+```
 #### 3.2.3. Đẩy các files csv vào MinIO 
 - Mở MinIO Console:
 ```text
@@ -371,11 +423,19 @@ http://localhost:30091
 Username: minioadmin
 Password: minioadmin
 
-#### B1 Tạo Bucket:
-- Sau khi đăng nhập -> Chọn Create Bucket -> Tạo bucket: "datalake"
-#### B2 Upload dữ liệu đầu vào
-- Tạo thư mục: "processed" bên trong bucket datalake.
-- Sau đó upload các file trong: 1_dataset/raw_data/ (đang mở ở local)
+#### 🪣 B1 Tạo Bucket:
+- Sau khi đăng nhập 
+- ở menu bên trái có Bucket, Chọn Bucket 
+- Tạo bucket: trên giao diện có chữ "Create Bucket", bấm vào 
+- Nó hiện giao diện Create Bucket, sau đó điền Bucket Name*  là "datalake" -> Click Create
+  
+#### 📁 B2 Upload dữ liệu đầu vào
+- Kệ nó, ở menu bên trái bấm vào Object Browser
+- Vào giao diện Object Browser rồi nó hiện danh sách bucket bên dưới, bấm vào datalake
+- Tiếp theo cần tạo datalake/processed: bên trái có chữ Create new path, bấm vào và điền processed
+- Rồi vào giao diện Object Browser của datalake này sẽ thấy chữ Upload thì bấm vào Upload Files => Sau đó tìm lấy thư mục của project hiện tại có tên 1_dataset/raw_data và upload tất cả files csv
+- => Kết quả giao diện hiện lên các files đó 
+
 ```
 gồm:
    users.csv
@@ -403,10 +463,15 @@ datalake/
 ```bash
 kubectl apply -f k8s/cassandra-config.yaml
 ```
+Tiếp tục đợi nó pull image và setup, tầm 3-6'
 
 #### 3.3.2. Kiểm tra trạng thái
 ```bash
 kubectl get pods
+cassandra-0                                   1/1     Running   0             4m6s
+cassandra-1                                   1/1     Running   0             3m29s
+cassandra-2                                   1/1     Running   2 (96s ago)   2m53s
+...
 ```
 
 #### 3.3.3. Tạo bảng
@@ -425,6 +490,30 @@ Hoặc có thể gộp B1 + B2 thành 1 lệnh
 ```bash
 kubectl exec -i cassandra-0 -- cqlsh < k8s/cassandra/init_cassandra.cql
 ```
+B3 xử lý lỗi nếu có cảnh báo 
+```bash
+Warnings :
+Your replication factor 3 for keyspace ecommerce is higher than the number of nodes 2 for datacenter DC1
+```
+
+Sửa
+```bash
+kubectl delete pod cassandra-2
+```
+
+Kiểm tra xem có đủ 3 dòng có chữ UN không 
+```bash
+PS D:\Project_BigData\Big_data> kubectl exec -it cassandra-0 -- nodetool status
+Datacenter: DC1
+===============
+Status=Up/Down
+|/ State=Normal/Leaving/Joining/Moving
+--  Address     Load        Tokens  Owns (effective)  Host ID                               Rack
+UN  10.244.2.6  105.37 KiB  16      100.0%            7269d4ba-7636-43fd-8d0c-5fd8def675a2  rack1
+UN  10.244.1.8  250.01 KiB  16      100.0%            28bf133a-a2a1-48cf-b330-60bc4ed599b9  rack1
+UN  10.244.3.8  100.32 KiB  16      100.0%            b5bbce0a-4fc0-4b58-b151-d8777d7d1110  rack1
+```
+
 ---
 ### 3.4. Redis
 #### 3.4.1. Deploy Redis
@@ -432,24 +521,34 @@ kubectl exec -i cassandra-0 -- cqlsh < k8s/cassandra/init_cassandra.cql
 kubectl apply -f k8s/redis.yaml
 ```
 
+Tiếp tục đợi nó pull image và setup, tầm 20s-2'
+
 #### 3.4.2. Kiểm tra trạng thái
 ```bash
 kubectl get pods
+...
+redis-6cf754768b-vsh25                        1/1     Running   0               60s
+...
 ```
 ---
 ### 3.5. Spark Cluster
-#### 3.5.1. Deploy Redis
+#### 3.5.1. Deploy Spark
 ```bash
-kubectl apply -f k8s/spark-config.yaml
+kubectl apply -f k8s/spark2-config.yaml
 ```
 
-```text
-http://localhost:30080
-```
+Tiếp tục đợi nó pull image và setup, tầm 20s-2'
+
 
 #### 3.5.2. Kiểm tra trạng thái
 ```bash
 kubectl get pods
+...
+spark-master-785dcd6688-b6dh2                 1/1     Running   0               37s
+spark-worker-557b7b687-2qkdw                  1/1     Running   0               32s
+spark-worker-557b7b687-dh7mb                  1/1     Running   0               32s
+spark-worker-557b7b687-gd4bn                  1/1     Running   0     
+...
 ```
 ---
 ## ⚡ Step 4: Deploy Processing Layer
@@ -459,14 +558,13 @@ kubectl get pods
 ```bash
 kubectl apply -f k8s/airflow.yaml
 ```
-Airflow UI:
-```text
-http://localhost:30081
-```
 
 #### 4.1.1. Kiểm tra trạng thái
 ```bash
 kubectl get pods
+ví dụ kết quả ra
+airflow-76c8bf67ff-sxsxg                      1/1     Running   0    
+...
 ```
 
 ---
@@ -543,6 +641,20 @@ Script sẽ:
 - Kích hoạt pipeline realtime
 
 ---
+
+## 8 Test
+### 8.1. Kafka
+```bash
+kubectl exec -it my-cluster-kafka-pool-0 -- bash (vào giao diện kafka)
+=> Kết quả
+[kafka@my-cluster-kafka-pool-0 kafka]$
+
+Tiếp theo viết lệnh để làm consumer xem dữ liệu tới
+/opt/kafka/bin/kafka-console-consumer.sh \
+--bootstrap-server localhost:9092 \
+--topic user-activity-events \
+--from-beginning
+```
 
 # Others
 

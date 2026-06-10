@@ -137,7 +137,6 @@ CREATE TABLE IF NOT EXISTS ecommerce.trending_products_realtime (
     purchase_count int,
     trend_score double,
 
-    computed_time_ts timestamp,
 
     PRIMARY KEY ((computed_time), trend_score, product_id)
 )
