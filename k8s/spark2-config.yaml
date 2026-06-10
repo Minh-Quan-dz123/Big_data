@@ -59,7 +59,7 @@ metadata:
   labels:
     app: spark-worker
 spec:
-  replicas: 3 # Chạy 2 Worker để xử lý song song
+  replicas: 2 # Chạy 2 Worker để xử lý song song
   selector:
     matchLabels:
       app: spark-worker

@@ -22,7 +22,7 @@ metadata:
   name: minio             
 spec:
   serviceName: minio      # gắn với service ở trên
-  replicas: 4             # tạo 4 pod
+  replicas: 2             # tạo 4 pod
   selector:               # quản lý các pod có lable là minio
     matchLabels:
       app: minio
@@ -59,4 +59,4 @@ spec:
         accessModes: ["ReadWriteOnce"] # chỉ 1 node được ghi vào volume này
         resources:
           requests:
-            storage: 1Gi
+            storage: 512Mi

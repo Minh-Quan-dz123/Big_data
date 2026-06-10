@@ -16,7 +16,7 @@ metadata:
   name: cassandra       # tên của StatefulSet
 spec:
   serviceName: cassandra # tên Service đi kèm StatefulSet
-  replicas: 3           # nên dùng 3 node
+  replicas: 1           # nên dùng 3 node
   selector:             # StatefulSet quản lý các Pod có label là cassandra
     matchLabels:
       app: cassandra    # nó sẽ quản lý pod có label là cassandra
@@ -56,4 +56,4 @@ spec:
         accessModes: ["ReadWriteOnce"]   #chỉ 1 node được ghi vào disk này
         resources:
           requests:
-            storage: 2Gi
+            storage: 1Gi
