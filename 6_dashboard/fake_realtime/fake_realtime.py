@@ -8,7 +8,7 @@ import time
 # có ở local fake_realtime.py (chương trình này) có raw_data/products.csv
 # Cấu trúc (product_id,product_name,category,brand,price,rating)
 BASE_URL = "http://localhost:30070"
-CSV_PATH = "raw_data/products.csv"
+CSV_PATH = "../../1_dataset/raw_data/products.csv"
 
 product_map = {}
 def load_products():

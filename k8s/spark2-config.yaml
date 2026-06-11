@@ -36,6 +36,7 @@ spec:
       containers:
         - name: spark-master
           image: minhquan-spark-image:latest
+          imagePullPolicy: IfNotPresent
           command:
             [
               "/opt/spark/bin/spark-class",
@@ -71,6 +72,7 @@ spec:
       containers:
         - name: spark-worker
           image: minhquan-spark-image:latest
+          imagePullPolicy: IfNotPresent
           # Worker cần biết địa chỉ Master để đăng ký (spark://spark-master:7077)
           command:
             [

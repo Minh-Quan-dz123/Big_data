@@ -18,5 +18,3 @@ nodes:
     - containerPort: 30070  # expose Serving app
       hostPort: 30070
   - role: worker
-  - role: worker
-  - role: worker
