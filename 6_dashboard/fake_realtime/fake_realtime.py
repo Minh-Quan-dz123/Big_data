@@ -2,13 +2,16 @@ import requests
 import csv
 import random
 import time
+import os
 # chương trình giả lập hành vi người dùng
 # user_id : U000001 -> U000100
 # product được view, cart, purchase: P000001 -> P000100
 # có ở local fake_realtime.py (chương trình này) có raw_data/products.csv
 # Cấu trúc (product_id,product_name,category,brand,price,rating)
 BASE_URL = "http://localhost:30070"
-CSV_PATH = "raw_data/products.csv"
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(current_dir, "..", "raw_data", "products.csv")
 
 product_map = {}
 def load_products():
@@ -43,8 +46,15 @@ def load_products():
 # 1. HEALTH CHECK
 def health_check():
     url = f"{BASE_URL}/"
-    res = requests.get(url)
-    print("HEALTH:", res.json())
+    try:
+        res = requests.get(url, timeout=3)
+        # Bắt trường hợp Server chạy nhưng chưa định nghĩa API gốc "/"
+        if res.status_code == 404:
+            print("HEALTH: [Server hoạt động] nhưng chưa có endpoint gốc '/' (Bỏ qua)")
+        else:
+            print("HEALTH:", res.json())
+    except Exception as e:
+        print(f"HEALTH CHECK FAILED (Server FastAPI có thể chưa bật): {e}")
 
 
 # 2. chương trình event vào api 0.5 giây 1 lần
@@ -55,12 +65,12 @@ def random_user():
 
 # 2.2 GENERATE RANDOM PRODUCT
 def random_product():
-    product_id = random.randint(1, 100)
-    pid = f"P{product_id:06d}"
-
-    if pid not in product_map:
+    if not product_map:
         return None
 
+    # Tối ưu: Lấy random ngẫu nhiên trực tiếp từ các key đã load thành công từ file CSV
+    # Đảm bảo 100% tỷ lệ trúng sản phẩm có thật, không bị hụt như hàm random cố định số trước đó
+    pid = random.choice(list(product_map.keys()))
     info = product_map[pid]
 
     return {
@@ -99,12 +109,10 @@ def build_event():
 def send_event(event):
     try:
         url = f"{BASE_URL}/api/events"
-        res = requests.post(url, json=event)
-
-        print("SENT:", event["user_id"], event["product_id"], event["event_type"], "->", res.status_code)
-
+        res = requests.post(url, json=event, timeout=2)
+        print("SENT:", event["user_id"], event["product_id"], event["event_type"], "-> HTTP", res.status_code)
     except Exception as e:
-        print("ERROR:", e)
+        print(f"ERROR: Không thể gửi tới API (Lỗi kết nối) - {type(e).__name__}")
 
 # 7. STREAM LOOP (0.5s)
 def send_event_stream():
@@ -116,7 +124,7 @@ def send_event_stream():
         if event:
             send_event(event)
 
-        time.sleep(0.5)
+        time.sleep(1)
 
 # RUN DEMO FLOW
 if __name__ == "__main__":

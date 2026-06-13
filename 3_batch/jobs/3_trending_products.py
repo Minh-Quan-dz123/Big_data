@@ -4,12 +4,12 @@
 #       - orders.csv
 #       - order_items.csv
 #       - products.csv
-# OUTPUT (Cassandra): ecommerce.trending_products
+# OUTPUT (MongoDB): ecommerce.trending_products
 
 # 1 IMPORT THƯ VIỆN
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, count, sum, when, current_date, datediff, to_timestamp, lit, coalesce, current_timestamp
+    col, count as spark_count, sum as spark_sum, when, current_date, datediff, to_timestamp, lit, coalesce, current_timestamp
 )
 
 
@@ -24,22 +24,21 @@ import sys
 INPUT_PATH = "s3a://datalake/processed/"
 
 MINIO_CONF = {
-    "endpoint": "minio:9000",
+    "endpoint": "http://minio-service:9000",
     "access_key": "minioadmin",
     "secret_key": "minioadmin",
 }
 
-CASSANDRA_CONF = {
-    "host": "cassandra",
-    "keyspace": "ecommerce",
-    "table": "trending_products"
+MONGODB_CONF = {
+    "uri": "mongodb://mongodb-service.default.svc.cluster.local:27017/",
+    "database": "ecommerce",
+    "collection": "trending_products"
 }
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("trending_products.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -48,16 +47,16 @@ logger = logging.getLogger(__name__)
 
 # 3 CREATE SPARK
 def create_spark():
+    #mongo_uri = f"{MONGODB_CONF['uri']}/{MONGODB_CONF['database']}.{MONGODB_CONF['collection']}"
+
     return SparkSession.builder \
         .appName("TrendingProductsJob") \
-        .master("spark://spark-master:7077") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
         .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
         .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
 
@@ -78,8 +77,8 @@ def build_trending_products(events, orders, order_items, products):
 
     # Đếm số lượng view hiện tại (current_window) và trước đó (previous_window)
     view_stats = views.groupBy("product_id").agg(
-        count(when((col("days_ago") >= 0) & (col("days_ago") <= 7), True)).alias("current_views"),
-        count(when((col("days_ago") > 7) & (col("days_ago") <= 14), True)).alias("previous_views")
+        spark_sum(when((col("days_ago") >= 0) & (col("days_ago") <= 7), 1).otherwise(0)).alias("current_views"),
+        spark_sum(when((col("days_ago") > 7) & (col("days_ago") <= 14), 1).otherwise(0)).alias("previous_views")
     )
 
     # Tính view_growth = (current - prev) / (prev + 1)
@@ -100,8 +99,8 @@ def build_trending_products(events, orders, order_items, products):
 
     # Đếm số lượng bán ra (hoặc lượt mua) hiện tại và trước đó
     order_stats = order_details.groupBy("product_id").agg(
-        sum(when((col("days_ago") >= 0) & (col("days_ago") <= 7), col("quantity")).otherwise(0)).alias("current_orders"),
-        sum(when((col("days_ago") > 7) & (col("days_ago") <= 14), col("quantity")).otherwise(0)).alias("previous_orders")
+        spark_sum(when((col("days_ago") >= 0) & (col("days_ago") <= 7), col("quantity")).otherwise(0)).alias("current_orders"),
+        spark_sum(when((col("days_ago") > 7) & (col("days_ago") <= 14), col("quantity")).otherwise(0)).alias("previous_orders")
     )
 
     # Tính order_growth = (current - prev) / (prev + 1)
@@ -131,12 +130,9 @@ def build_trending_products(events, orders, order_items, products):
 
     # 4.4 Thêm thông tin required (trend_window, trend_date)
     trending_df = trending_df.withColumn("trend_window", lit("7d"))
-    # Chuyển thời gian hiện tại thành timestamp millis cho Cassandra
+    # Chuyển thời gian hiện tại thành timestamp millis cho MongoDB
     ref_time_ms = int(current_time().timestamp() * 1000)
-    trending_df = trending_df.withColumn(
-        "trend_date", 
-        lit(ref_time_ms)
-    )
+    trending_df = trending_df.withColumn("trend_date", lit(ref_time_ms))
 
     # Join để đảm bảo chỉ lấy các sản phẩm tồn tại trong bảng products (Nếu cần thiết)
     # Ở đây đề bài chỉ yêu cầu product_id nên có thể pass.
@@ -158,20 +154,19 @@ def build_trending_products(events, orders, order_items, products):
     return final_output
 
 
-# 5 SAVE TO CASSANDRA
-def save_to_cassandra(df):
-    logger.info("Saving to Cassandra...")
+# 5 SAVE TO MONGODB
+def save_to_mongodb(df):
+    logger.info("Saving trending products to MongoDB...")
 
     df.write \
-        .format("org.apache.spark.sql.cassandra") \
+        .format("mongodb") \
         .mode("overwrite") \
-        .options(
-            table=CASSANDRA_CONF["table"],
-            keyspace=CASSANDRA_CONF["keyspace"]
-        ) \
+        .option("spark.mongodb.write.connection.uri", MONGODB_CONF["uri"]) \
+        .option("database", MONGODB_CONF["database"]) \
+        .option("collection", MONGODB_CONF["collection"]) \
         .save()
 
-    logger.info("5. Saved to Cassandra successfully")
+    logger.info("5. Saved to MongoDB successfully")
 
 
 # 6 RUN PIPELINE
@@ -195,7 +190,7 @@ def run_pipeline():
                 .option("header", True) \
                 .option("inferSchema", True) \
                 .csv(INPUT_PATH + "events.csv")
-            logger.info(f"Events count: {events.count()}")
+
         except Exception as e:
             logger.warning(f"Could not load events.csv. Error: {str(e)}. Creating empty events dataframe.")
             # Tạo dataframe rỗng nếu thiếu file để job không chết ngay lập tức
@@ -216,7 +211,6 @@ def run_pipeline():
                 .option("header", True) \
                 .option("inferSchema", True) \
                 .csv(INPUT_PATH + "orders.csv")
-            logger.info(f"Orders count: {orders.count()}")
         except:
             logger.warning("Could not load orders.csv")
             raise
@@ -228,7 +222,6 @@ def run_pipeline():
                 .option("header", True) \
                 .option("inferSchema", True) \
                 .csv(INPUT_PATH + "order_items.csv")
-            logger.info(f"Order items count: {order_items.count()}")
         except:
             logger.warning("Could not load order_items.csv")
             raise
@@ -240,7 +233,6 @@ def run_pipeline():
                 .option("header", True) \
                 .option("inferSchema", True) \
                 .csv(INPUT_PATH + "products.csv")
-            logger.info(f"Products count: {products.count()}")
         except:
             logger.warning("Could not load products.csv")
             # products is not strictly needed for the calculation if we only need product_id
@@ -254,10 +246,8 @@ def run_pipeline():
             products if 'products' in locals() else None
         )
 
-        logger.info(f"Final rows: {final_output.count()}")
-
-        # 6.7 SAVE TO CASSANDRA
-        save_to_cassandra(final_output)
+        # 6.7 SAVE TO MONGODB
+        save_to_mongodb(final_output)
 
         # 6.8 SUCCESS
         duration = (datetime.now() - start_time).total_seconds()

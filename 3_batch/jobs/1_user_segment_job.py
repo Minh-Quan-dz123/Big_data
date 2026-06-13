@@ -13,7 +13,7 @@ from pyspark.sql import SparkSession
 # pyspark.sql = module xử lý dữ liệu dạng bảng (DataFrame)
 
 # 1.2.
-from pyspark.sql.functions import col, when, sum, count, current_date, datediff, to_date, lit
+from pyspark.sql.functions import col, when, sum as spark_sum, count as spark_count, avg, datediff, to_date, lit
 # pyspark.sql.functions:
 # - Chứa hàng trăm hàm xử lý dữ liệu DataFrame.
 # Ví dụ:
@@ -24,12 +24,6 @@ from pyspark.sql.functions import col, when, sum, count, current_date, datediff,
 #   current_date()  -> ngày hiện tại
 #   datediff()      -> tính số ngày chênh lệch
 
-#
-# Vì import * nên phía dưới dùng trực tiếp:
-#   col(...)
-#   when(...)
-# mà không cần:
-#   functions.col(...)
 
 # 1.3.
 from pyspark.ml.feature import VectorAssembler
@@ -82,19 +76,18 @@ def current_time() -> datetime: #2025-11-14 23:18:00
 # 2.1 input path
 INPUT_PATH = "s3a://datalake/processed/"
 
-# 2.2 MinIO config
+# 2.2 MinIO config (Trỏ về K8s Service)
 MINIO_CONF = {
-    "endpoint": "minio:9000",
+    "endpoint": "http://minio-service:9000",
     "access_key": "minioadmin",
     "secret_key": "minioadmin",
 }
 
-# 2.3 Cassandra config
-CASSANDRA_CONF = {
-    "host": "cassandra",     # tìm đến service tên "cassandra" => phải giống trong file .yaml
-                             # sau đó nó tự mò tới port mặc định của cassandra là 9042
-    "keyspace": "ecommerce", # tên database
-    "table": "user_segment"  # tên bảng kết quả
+# 2.3 MongoDB config
+MONGODB_CONF = {
+    "uri": "mongodb://mongodb-service.default.svc.cluster.local:27017/", # Trỏ về K8s Service nội bộ
+    "database": "ecommerce",        # Tên database 
+    "collection": "user_segment"              # Tên bảng kết quả
 }
 
 # 2.4 logging config (phụ)
@@ -102,8 +95,7 @@ logging.basicConfig(
     level=logging.INFO,                               # loại logging
     format="%(asctime)s [%(levelname)s] %(message)s", # format
     handlers=[
-        logging.FileHandler("user_segment.log"), # ghi log vào file
-        logging.StreamHandler(sys.stdout) # ghi log ra terminal
+        logging.StreamHandler(sys.stdout) # Đẩy thẳng log ra stdout để xem bằng lệnh kubectl logs
     ]
 )
 logger = logging.getLogger(__name__)
@@ -112,16 +104,16 @@ logger = logging.getLogger(__name__)
 # 3 KHỞI TẠO OBJECT SPARK
 # tạo hàm để gọi khởi tạo object
 def create_spark():
+    # Khởi tạo URI kết nối MongoDB
+    #mongo_uri = f"{MONGODB_CONF['uri']}/{MONGODB_CONF['database']}.{MONGODB_CONF['collection']}"
     return SparkSession.builder \
         .appName("UserSegmentationJob") \
-        .master("spark://spark-master:7077") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
         .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
         .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
 # 4 BUIL USER SEGMENT
@@ -138,10 +130,7 @@ def build_features(users, orders):
     logger.info("Building features....")
 
     # 1 xử lý cột signup days: convert-> kiểu data
-    users = users.withColumn(
-        "signup_date",
-        to_date(col("signup_date"))
-    )
+    users = users.withColumn("signup_date", to_date(col("signup_date")))
 
     # 2 từ đó tạo days_since_signup
     users = users.withColumn(
@@ -158,20 +147,16 @@ def build_features(users, orders):
     # sau đó cứ thế tính tổng order, đơn hoàn thành và tệ
     order_status = orders.groupBy("user_id").agg(
         # 3.1 tổng số đơn
-        count("order_id").alias("total_orders"),
+        spark_count("order_id").alias("total_orders"),
 
         # 3.2 tổng các đơn đã hoàn thành: dùng when để giống if else
-        sum(
-            when(
-                col("order_status") == "completed", 1
-            ).otherwise(0) # giống if else
+        spark_sum(
+            when(col("order_status") == "completed", 1).otherwise(0) # giống if else
         ).alias("total_completed_orders"),
 
         # 3.3 tổng các đơn total_bad_orders
-        sum(
-            when(
-                col("order_status").isin(["cancelled", "returned"]),1
-            ).otherwise(0) # giống if else
+        spark_sum(
+            when(col("order_status").isin(["cancelled", "returned"]),1).otherwise(0) # giống if else
         ).alias("total_bad_orders")
     )
 
@@ -189,9 +174,7 @@ def build_features(users, orders):
 
     # 3.6 join users + orders -> chỉ lấy cột cần thiết
     data_feature = users.select("user_id", "days_since_signup").join(
-        order_status,   
-        on = "user_id",   
-        how = "left" # left join theo user_id
+        order_status,   on = "user_id",   how = "left" # left join theo user_id
     ).fillna(0) # thay NULL = 0
 
     # logger.info("Feature engineering completed")
@@ -205,12 +188,7 @@ def run_kmeans(data_feature):
     # 1. vector hóa
     # khai báo các cột input, output của vector
     assembler = VectorAssembler(
-        inputCols=[
-            "days_since_signup",
-            "total_orders",
-            "completion_rate",
-            "cancellation_rate"
-        ],
+        inputCols=["days_since_signup", "total_orders", "completion_rate","cancellation_rate"],
         outputCol="features"
     )
 
@@ -247,39 +225,31 @@ def run_kmeans(data_feature):
     predicted = model.transform(scaled_df)
 
     # 7 gán nhãn
-    # quy trình 2 bước
-    # B1 : lấy centroid (4 cluster)
-    # B2 : lấy ra từng center trong centers và gán nhãn
-    # 7.1 lấy centroid từ model
-    centers = model.clusterCenters()
+    #D ùng giá trị trung bình thực tế
+    logger.info("Calculating real cluster profiles for mapping...")
+
+    # 7.1. Gom nhóm dữ liệu đã phân cụm để lấy giá trị thực tế unscaled đưa vào phân loại nhãn
+    cluster_profiles = predicted.groupBy("cluster").agg(
+        avg("total_orders").alias("avg_orders"),
+        avg("completion_rate").alias("avg_completion"),
+        avg("cancellation_rate").alias("avg_cancellation")
+    ).collect()
 
     # 7.2 tạo dict lưu thông tin từng cluser
     cluster_info = {}
-    for i, center in enumerate(centers):
-        # center:
-        # [days_since_signup,
-        #  total_orders,
-        #  completion_rate,
-        #  cancellation_rate]
-        cluster_info[i] = {
-            "total_orders": center[1],
-            "completion_rate": center[2],
-            "cancellation_rate": center[3]
+    for row in cluster_profiles:
+        cluster_info[row['cluster']] = {
+            "total_orders": row['avg_orders'],
+            "completion_rate": row['avg_completion'],
+            "cancellation_rate": row['avg_cancellation']
         }
 
-    logger.info(cluster_info)
+    logger.info(f"Real Centroids profile (Unscaled): {cluster_info}")
     
     # chia cluster mua nhiều / mua ít
     sorted_by_orders = sorted(cluster_info.items(), key=lambda x: x[1]["total_orders"])
-    low_order_clusters = [
-        sorted_by_orders[0][0],
-        sorted_by_orders[1][0]
-    ]
-
-    high_order_clusters = [
-        sorted_by_orders[2][0],
-        sorted_by_orders[3][0]
-    ]
+    low_order_clusters = [sorted_by_orders[0][0], sorted_by_orders[1][0]]
+    high_order_clusters = [sorted_by_orders[2][0],sorted_by_orders[3][0]]
 
     # chia theo mua nhiều + hoàn thành cao + hủy thấp 
     # = Frequent Shoppers
@@ -324,9 +294,9 @@ def run_kmeans(data_feature):
 
     return predicted
 
-# 5.  SAVE TO CASSANDRA
-def save_to_cassandra(df):
-    logger.info("Saving to Cassandra...")
+# 5.  SAVE TO MONGODB
+def save_to_mongodb(df):
+    logger.info("Saving to MongoDB...")
 
     final_df = df.select(
         "user_id",
@@ -340,16 +310,17 @@ def save_to_cassandra(df):
         "segment_name"
     )
 
-    # ghi xuống cassandra
+    # ghi xuống MongoDB
     final_df.write \
-        .format("org.apache.spark.sql.cassandra") \
-        .mode("overwrite") \
-        .options(
-            table=CASSANDRA_CONF["table"],
-            keyspace=CASSANDRA_CONF["keyspace"]
-        ) \
+        .format("mongodb") \
+        .mode("append") \
+        .option("spark.mongodb.write.connection.uri", MONGODB_CONF["uri"]) \
+        .option("spark.mongodb.write.database", MONGODB_CONF["database"]) \
+        .option("spark.mongodb.write.collection", MONGODB_CONF["collection"]) \
+        .option("spark.mongodb.write.operationType", "update") \
+        .option("spark.mongodb.write.idFieldList", "user_id") \
         .save()
-    logger.info("Saved to Cassandra successfully")
+    logger.info("Saved to MongoDB successfully")
 
 # 6 RUN PROCESS FULL
 def run_pipeline():
@@ -368,32 +339,26 @@ def run_pipeline():
         spark.sparkContext.setLogLevel("ERROR")
 
         # 2 spark đọc csv từ minio
-        logger.info("Loading users data...")
+        logger.info("Loading users data from MinIO...")
         users = spark.read \
             .option("header", True) \
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "users.csv")
-        
-        logger.info(f"Users count: {users.count()}")
 
-
-        logger.info("Loading orders data...")
+        logger.info("Loading orders data from MinIO...")
         orders = spark.read \
             .option("header", True) \
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "orders.csv")
         
-        logger.info(f"Orders count: {orders.count()}")
-
         # 3 feature engineering
         data_feature = build_features(users, orders)
-        logger.info(f"Feature rows: {data_feature.count()}")
 
         # 4 KMeans process
         predicted = run_kmeans(data_feature)
 
-        # 5 END to cassandra
-        save_to_cassandra(predicted)
+        # 5 Ghi dữ liệu xuống tầng Serving Layer (MongoDB)
+        save_to_mongodb(predicted)
 
         # print
         duration = (datetime.now() - start_time).total_seconds()

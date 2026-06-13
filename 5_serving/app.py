@@ -1,465 +1,227 @@
 from fastapi import FastAPI, HTTPException
-from cassandra.cluster import Cluster
-from kafka import KafkaProducer
-import redis # sử dụng redis client để kết nối redis server
+from pymongo import MongoClient
+from confluent_kafka import Producer
+import redis
 import os
 import json
+import logging
 from datetime import datetime, timezone
+from fastapi.middleware.cors import CORSMiddleware
+
+# --- CẤU HÌNH LOGGING ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("ServingAPI")
 
 
-# 1 tạo Server FastAPI object
 app = FastAPI(title="Serving Layer - Realtime Recommendation")
+origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    # Thêm domain production của bạn vào đây khi deploy
+    # "https://my-ecommerce-app.com",
+]
 
-# 2 config
-# 2.1. redis client
-redis_client  = redis.Redis(
-    host = os.getenv("REDIS_HOST", "redis"), # nếu ko có file env thì nó tự dừng "redis" (docker service name) 
-    port = 6379,                             # port mặc định của redis
-    decode_responses=True                    # False => trả về byte (b'abc') còn true trả về string ("abc")
+app.add_middleware(
+    CORSMiddleware,     # <--- ĐÂY LÀ THAM SỐ BẠN ĐANG THIẾU
+    allow_origins=origins,
+    allow_credentials=True, # (Khuyên dùng) Cho phép gửi cookie/token
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-try:
-    redis_client.ping()
-    print("Redis connected successfully")
-except Exception as e:
-    print(f"Redis connection failed: {e}")
+logger.info("Khởi tạo kết nối Redis, MongoDB và Kafka...")
 
-# 2.2. cassandra client
-CASSANDRA_CONF = {
-    "host": "cassandra",
-    "keyspace": "ecommerce",
-    "table_batch": "user_recommendations_batch",
-    "table_realtime1": "realtime_user_interest",
-    "table_realtime2": "trending_products_realtime"
-}
-# khởi tạo object cassandra client
-cluster = Cluster([CASSANDRA_CONF["host"]])
-# gọi hàm connect
-session = cluster.connect(CASSANDRA_CONF["keyspace"])
-
-# 2.3. cấu hình kafka client
-# tạo object
-producer = KafkaProducer(
-    bootstrap_servers="my-cluster-kafka-bootstrap:9092",
-    value_serializer=lambda v: json.dumps(v).encode("utf-8")
+# 2.1. Redis Client
+redis_client = redis.Redis(
+    host="127.0.0.1",
+    port=6379,
+    decode_responses=True
 )
 
+# 2.2. MongoDB Client
+MONGO_URI = "mongodb://127.0.0.1:27017"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["ecommerce"]
 
+# 2.3. 2.3. Kafka Producer - Đồng bộ với cấu hình Kafka Service đã khai báo
+producer = Producer({
+    'bootstrap.servers': '127.0.0.1:9092'
+})
+def delivery_report(err, msg):
+    if err is not None:
+        logger.error(f"Kafka Delivery Failed: {err}")
+    else:
+        logger.info(f"Kafka Delivery Success: Topic {msg.topic()} [Partition {msg.partition()}]")
 
-# 3 các hàm utils
-# 3.1 hàm lấy data và chuyển trành json an toàn
-def safe_json(data):
-    if not data:
-        return None
-    try:
-        return json.loads(data)
-    except Exception:
-        return None
-    
-# cache TTL
+# 3. Utils
 CACHE_TTL = 60
 
-# 3.2. hàm lấy ra value từ key trong redis
 def cache_get(key):
-    return safe_json(redis_client.get(key))
+    val = redis_client.get(key)
+    if val:
+        logger.info(f"[CACHE HIT] Lấy dữ liệu thành công từ Redis cho key: {key}")
+        return json.loads(val)
+    logger.info(f"[CACHE MISS] Không tìm thấy {key} trong Redis, chuẩn bị chọc xuống DB.")
+    return None
 
-# 3.3. hàm set value vào redis (set, setex = set + ttl)
-def cache_set(key, value, ttl = CACHE_TTL):
+def cache_set(key, value, ttl=CACHE_TTL):
     redis_client.setex(key, ttl, json.dumps(value))
-    
+    logger.info(f"[CACHE SET] Đã lưu {key} vào Redis với TTL={ttl}s")
 
-# 4 APIs
-
-# 4.1. client -> server: post /api/events để server cập nhật thao tác của user_id
-#      server -> kafka
-'''
-Ví dụ: Request
-{
-    "user_id": "U1",
-    "product_id": "P15",
-    "product_name": "abc",
-    "category" : clothing,
-    "event_type": "view" // event_type = view | cart | purchase
-}
-'''
-@app.get("/")
-def root():
-
-    return {
-        "service": "Serving Layer",
-        "status": "running"
-    }
-
+# 4. APIs
+# 4.1. user thanh tác với product
 @app.post("/api/events")
 def event(event: dict):
-   
-    # 1 gom các thông tin cần thiết vào 1 object
+    logger.info(f"[API POST /api/events] Nhận event '{event.get('event_type')}' từ User {event.get('user_id')} cho Product {event.get('product_id')}")
     kafka_event = {
         "user_id": event["user_id"],
         "product_id": event["product_id"],
         "product_name": event["product_name"],
         "event_type": event["event_type"],
         "category": event["category"],
-        "event_timestamp": datetime.now(timezone.utc).timestamp()* 1000
+        "event_timestamp": datetime.now(timezone.utc).timestamp() * 1000
     }
-
-    # 2 gọi hàm send là được
     try:
-        producer.send("user-activity-events", kafka_event)
-        producer.flush()
+        # Gửi message với Producer của confluent_kafka
+        producer.produce(
+            "user-activity-events", 
+            value=json.dumps(kafka_event).encode('utf-8'),
+            callback=delivery_report
+        )
+        producer.poll(0) # Kích hoạt callback
     except Exception as e:
+        logger.error(f"Lỗi khi đẩy event vào Kafka: {str(e)}")
         raise HTTPException(500, str(e))
-    # Lưu ý: khi send thì client ko gửi ngay lập tức xuống broker mà đưa vào buffer trong RAM
-    # 1 thread nền sẽ gom nhiều message lại thành batch rồi mới gửi tới kafka broker
     
-    return {
-        "status": "ok",
-        "message": "event sent to kafka"
-    }
+    return {"status": "ok", "message": "event sent to kafka"}
 
-# 4.2 client -> server: get lấy recommendation cho user_id 
-#     server -> cassandra
-''' 
-ví dụ : GET /api/recommendations/U1
-Response
-{
-    "user_id": "U1",
-    "segment_name": Frequent Shoppers | Risky Frequent Buyers | Low Frequency | Bad Customer
-    "recommendations": [
-        {
-            "product_id": "P15",
-            "product_name": "Fami",
-            "category": "vitamin",
-            "score": 98.3,
-            "recommendation_type": ABC
-        },
-        {
-            "product_id": "P8",
-            "product_name": "iphone 11 pro max",
-            "category": "smartphone",
-            "score": 95
-            "recommendation_type": ABC
-        }
-    ]
-}
-'''
-@app.get("/api/recommendations/{user_id}")
-def recommendation(user_id: str):
-    # 1 lấy dữ liệu trong cache
-    cache_key = f"recommendation:{user_id}"
-
-    result_cache = cache_get(cache_key)
-
-    # 2 nếu tồn tại thì oke, ko thì set
-    if result_cache:
-        return result_cache
-    
-    # 3 ko thì set dữ liệu từ cassandra vào redis server
-    # 3.1. lấy từ cassandra
-    # khai báo query
-    query = """
-        SELECT segment_name, product_id, product_name, category, recommendation_score, recommendation_type
-        FROM user_recommendations_batch
-        WHERE user_id=%s
-    """
-    # gọi hàm và đợi nó trả về các hàng kết quả
-    rows = list(session.execute(query, [user_id])) # trong query có user_id=%s, đó là nhập tham số
-# ---------------KO đảm bảo ranking ---------------------
-    if not rows:
-        raise HTTPException(404, "No data")
-
-    segment_name = rows[0].segment_name
-
-    # 4 gán các row trong rows vào 1 mảng json để gửi lại client
-    recommendation = []
-
-    for row in rows:
-        recommendation.append({
-            "product_id": row.product_id,
-            "product_name": row.product_name,
-            "category": row.category,
-            "score": row.recommendation_score,
-            "recommendation_type": row.recommendation_type
-        })
-    
-    result_final = {
-        "user_id": user_id,
-        "segment_name":segment_name,
-        "recommendations": recommendation
-    }
-
-    # 3.2. Lưu vào redis cái đã
-    cache_set(cache_key, result_final)
-    return result_final
-
-
-# 4.3 client -> server: get lấy recommendation realtime cho user_id 
-#     server -> cassandra
-''' 
-CREATE TABLE IF NOT EXISTS ecommerce.realtime_user_interest (
-    user_id text,
-    product_id text,
-
-    product_name text,
-    category text,
-
-    event_type text,
-    event_timestamp bigint,
-
-    computed_score float,
-
-    PRIMARY KEY (user_id, product_id)
-);
-ví dụ : GET /api/recommendations_realtime/U1
-Response
-{
-    "user_id": "U1",
-    "recommendations": [
-        {
-            "product_id": "P15",
-            "product_name": "Fami",
-            "category": "vitamin",
-            "score": 98.3,
-            "event_type": ABC
-        },
-        {
-            "product_id": "P8",
-            "product_name": "iphone 11 pro max",
-            "category": "smartphone",
-            "score": 95
-            "event_type": ABC
-        }
-    ]
-}
-'''
+# 4.2. gợi ý thao tác theo thao tác của user_id
 @app.get("/api/recommendations_realtime/{user_id}")
 def recommendations_realtime(user_id: str):
-    # 1 lấy dữ liệu trong cache
+    logger.info(f"[API GET /api/recommendations_realtime] Yêu cầu dữ liệu cho User {user_id}")
     cache_key = f"recommendation_realtime:{user_id}"
-
     result_cache = cache_get(cache_key)
-
-    # 2 nếu tồn tại thì oke, ko thì set
     if result_cache:
         return result_cache
     
-    # 3 ko thì set dữ liệu từ cassandra vào redis server
-    # 3.1. lấy từ cassandra
-    # khai báo query
-    query = """
-        SELECT product_id, product_name, category, computed_score, event_type
-        FROM realtime_user_interest
-        WHERE user_id=%s
-    """
-    # gọi hàm và đợi nó trả về các hàng kết quả
-    rows = list(session.execute(query, [user_id])) # trong query có user_id=%s, đó là nhập tham số
-# ---------------KO đảm bảo ranking ---------------------
+    # Truy vấn MongoDB 
+    # Tìm tất cả document trong collection trending_products_realtime
+    logger.info(f"Đang query MongoDB collection 'realtime_user_interest' cho User {user_id}...")
+    cursor = db.trending_products_realtime.find({"user_id": user_id}).sort("trend_score", -1).limit(50)
+    rows = list(cursor)
+    
     if not rows:
+        logger.warning(f"MongoDB trả về rỗng. User {user_id} chưa có dữ liệu realtime (Ném lỗi 404)")
         raise HTTPException(404, "No data")
 
-    # 4 gán các row trong rows vào 1 mảng json để gửi lại client
-    recommendation = []
+    logger.info(f"Tìm thấy {len(rows)} bản ghi realtime cho User {user_id} trong MongoDB.")
 
+    recommendations = []
     for row in rows:
-        recommendation.append({
-            "product_id": row.product_id,
-            "product_name": row.product_name,
-            "category": row.category,
-            "score": row.computed_score,
-            "event_type": row.event_type
+        recommendations.append({
+            "product_id": row["product_id"],
+            "product_name": row["product_name"],
+            "category": row["category"],
+            "score": row.get("trend_score", 0),
+            "event_type": row.get("event_type", "Aggregated")
         })
     
-    result_final = {
-        "user_id": user_id,
-        "recommendations": recommendation
-    }
-
-    # 3.2. Lưu vào redis cái đã
+    result_final = {"user_id": user_id, "recommendations": recommendations}
     cache_set(cache_key, result_final)
     return result_final
 
-
-# 4.4. client -> server: get thông tin trending
-#     server -> redis, nếu cache miss -> lấy từ cassandra và cập nhật redis
-'''
-ví dụ GET /api/trending
-Response
-{
-    "window_end": "10:05", // thời điểm thông tin trending product mới nhất
-    "products": [
-        {
-            "product_id": "P15",
-            "product_name": "Nimbus Stay",
-            "category": "Toys",
-            "trend_score": 250
-        },
-        {
-            "product_id": "P8",
-            "product_name": "Orion Head",
-            "category": "Beauty",
-            "trend_score": 220
-        }
-    ]
-}
-
-trong cassandra: 
-CREATE TABLE trending_products_realtime (
-    computed_time bigint,
-    trend_score double,
-    product_id text,
-    product_name text,
-    category text,
-    view_count int,
-    cart_count int,
-    purchase_count int,
-
-    PRIMARY KEY (
-        (computed_time),
-        trend_score,
-        product_id
-    )
-)
-WITH CLUSTERING ORDER BY (
-    trend_score DESC,
-    product_id ASC
-);
-
-CREATE TABLE trending_metadata (
-    key text PRIMARY KEY,
-    latest_computed_time bigint
-);
-'''
+# 4.3 sản phẩm trending
 @app.get("/api/trending")
 def trending():
-    # 1 lấy dữ liệu , lấy ra 20 sản phẩm có điểm trend_score cao nhất hiện tại
+    logger.info("[API GET /api/trending] Bắt đầu lấy danh sách Trending")
     cache_key = "trending:latest"
     cached = cache_get(cache_key)
     if cached:
         return cached
-
-    # 2 nếu cache miss thì querry trong cassandra
-    # 2.1. lấy dòng đầu tiên trong latest_computed_time
-    metadata = session.execute("""
-        SELECT latest_computed_time
-        FROM trending_metadata
-        WHERE key='trending_products'
-    """).one() # tương đương lấy thời gian gần nhất
-
-    if not metadata:
-        raise HTTPException(
-            status_code=404,
-            detail="No trending data"
-        )
     
-    computed_time = metadata.latest_computed_time
+    pipeline = [
+        {"$group": {
+            "_id": "$product_id",
+            "product_name": {"$first": "$product_name"},
+            "category": {"$first": "$category"},
+            "trend_score": {"$sum": "$trend_score"},
+            "view_count": {"$sum": "$view_count"},
+            "cart_count": {"$sum": "$cart_count"},
+            "purchase_count": {"$sum": "$purchase_count"}
+        }},
+        {"$sort": {"trend_score": -1}},
+        {"$limit": 50}
+    ]
 
-    # 2.2. tiếp tục từ computed_time ta lấy dữ liệu từ bảng chính
-    rows = session.execute("""
-        SELECT product_id,
-               product_name,
-               category,
-               trend_score,
-               view_count,
-               cart_count,
-               purchase_count
-        FROM trending_products_realtime
-        WHERE computed_time=%s
-        LIMIT 20
-    """, [computed_time])
-    products = []
+    # Query trực tiếp vào collection dữ liệu
+    # Sort theo trend_score giảm dần (-1) và lấy top 100
+    logger.info("Đang query MongoDB collection 'trending_products_realtime'...")
+    products = list(db.trending_products_realtime.aggregate(pipeline))
+    
+    
+    if not products:
+        raise HTTPException(404, "No trending data available")
 
-    for row in rows:
-        products.append({
-            "product_id": row.product_id,
-            "product_name": row.product_name,
-            "category": row.category,
-            "trend_score": row.trend_score,
-            "view_count": row.view_count,
-            "cart_count": row.cart_count,
-            "purchase_count": row.purchase_count
-        })
+    # Ép kiểu _id (ObjectId) sang chuỗi (string) để JSON có thể serialize được
+    for p in products:
+        p["product_id"] = str(p.pop("_id"))
 
+    # Format kết quả trả về
     result = {
-        "window_end": datetime.fromtimestamp(
-            computed_time / 1000,
-            tz=timezone.utc
-        ).strftime("%H:%M"),
+        "count": len(products),
         "products": products
     }
 
     cache_set(cache_key, result, ttl=60)
-
     return result
 
-# 4.5. client -> server: get ứng với mỗi product, lấy danh sách user 
-# mỗi product có thể bán cho user nào
-# user đó thuộc loại {Low Frequency, Risky Frequent Buyers, Frequent Shoppers, Bad Customer}
-# họ có quan tâm tới sản phẩm này gần đây ko
-#     server -> redis, nếu cache miss -> lấy từ cassandra và cập nhật redis
-# 
-'''
-ví dụ: GET /api/products/P15/potential-customers
-Response
-```json
-{
-    "product_id": "P15",
-    "customers": [
-        {
-            "user_id": "U1",
-            "interest_score": 98.0,
-            "type": "consumption"
-        },
-        {
-            "user_id": "U3",
-            "interest_score": 95.0,
-            "type": "consumption"
-        },
-        {
-            "user_id": "U5",
-            "interest_score": 90.2,
-            "type": "similar"
-        }
-    ]
-}
-'''
+# 4.4. API lấy recommendation BATCH cho user_id 
+# Server -> MongoDB (collection: user_recommendations_batch)
+@app.get("/api/recommendations/{user_id}")
+def recommendation(user_id: str):
+    logger.info(f"[API GET /api/recommendations] Yêu cầu gợi ý Batch cho User {user_id}")
+    # 1. Lấy dữ liệu trong cache
+    cache_key = f"recommendation:{user_id}"
+    result_cache = cache_get(cache_key)
 
-# @app.get("/api/products/{product_id}/potential-customers")
-# def customer_for_product(product_id: str):
-
-#     # 1 lấy từ trong redis server
-#     cached = cache_get(f"potential-customers:{product_id}")
-#     if cached:
-#         return cached
+    if result_cache:
+        return result_cache
     
-#     # 2 nếu miss thì lấy trong cassandra
+    logger.info(f"Đang query MongoDB collection 'user_recommendations_batch' cho User {user_id}...")
+    # 2. Query MongoDB 
+    # Lưu ý: Trong MongoDB, bảng batch thường sẽ chứa mảng recommendations hoặc nhiều document
+    # Tôi giả định collection này chứa document cho từng user_id
+    rows = list(db.user_recommendations_batch.find({"user_id": user_id}))
     
+    if not rows:
+        logger.warning(f"MongoDB trả về rỗng. User {user_id} chưa chạy Batch Job (Ném lỗi 404)")
+        raise HTTPException(404, "No batch data found for this user")
 
-#     # sau đó 
+    # Giả sử segment_name được lấy từ record đầu tiên
+    logger.info(f"Tìm thấy {len(rows)} gợi ý Batch cho User {user_id} trong MongoDB.")
 
-#     return 1
+    segment_name = rows[0].get("segment_name", "Unknown")
 
-# # 4.5. client -> server: get lấy ra lịch sử trend của sản phẩm này
-# #     server -> redis, nếu cache miss -> lấy từ cassandra và cập nhật redis
+    # 3. Chuyển đổi dữ liệu
+    recommendation_list = []
+    for row in rows:
+        recommendation_list.append({
+            "product_id": row["product_id"],
+            "product_name": row["product_name"],
+            "category": row["category"],
+            "score": row["recommendation_score"],
+            "recommendation_type": row["recommendation_type"]
+        })
+    
+    result_final = {
+        "user_id": user_id,
+        "segment_name": segment_name,
+        "recommendations": recommendation_list
+    }
 
-# '''
-# Ví dụ: GET /api/trending/P15/history
-# Response
-# [
-#     {
-#         "window": "10:00",
-#         "score": 12.0
-#     },
-#     {
-#         "window": "10:01",
-#         "score": 16.2
-#     },
-#     {
-#         "window": "10:02",
-#         "score": 25.3
-#     }
-# ]
-# '''
-# @app.get("/api/trending/{product_id}/history")
-# def history_trend_of_product(product_id: str):
-#     # tạm thời 
-#     return 2
+    # 4. Lưu vào redis
+    cache_set(cache_key, result_final)
+    return result_final

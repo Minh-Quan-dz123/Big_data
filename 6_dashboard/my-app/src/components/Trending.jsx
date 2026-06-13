@@ -5,7 +5,16 @@ export default function Trending() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
+    // Gọi lần đầu khi trang vừa load
     getTrending().then(setData);
+
+    // Đặt bộ đếm tự động gọi lại mỗi 5 giây (5000ms)
+    const id = setInterval(() => {
+      getTrending().then(setData);
+    }, 5000);
+
+    // Dọn dẹp bộ đếm khi tắt component
+    return () => clearInterval(id);
   }, []);
 
   if (!data) {
@@ -23,21 +32,21 @@ export default function Trending() {
       {/* Header */}
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-800">
-          Trending Products
+          Live Trending Products
         </h2>
         <p className="text-xs text-gray-500">
-          Updated at {data.window_end}
+          Auto-updating every 5s
         </p>
       </div>
 
-      {/* Top product */}
+      {/* Top product (Chỉ hiện nếu có dữ liệu) */}
       {top && (
-        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border rounded-lg p-4 mb-4">
-          <div className="text-xs text-gray-500 mb-1">
-            🔥 Top Trending Product
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-4 mb-4 shadow-sm">
+          <div className="text-xs text-indigo-500 mb-1 font-semibold tracking-wider uppercase">
+            🔥 #1 Trending Now
           </div>
 
-          <div className="font-semibold text-gray-800 text-lg">
+          <div className="font-bold text-gray-800 text-lg">
             {top.product_name}
           </div>
 
@@ -45,14 +54,14 @@ export default function Trending() {
             {top.category}
           </div>
 
-          <div className="text-indigo-600 font-semibold">
-            Trend Score: {top.trend_score}
+          <div className="text-indigo-600 font-bold bg-white inline-block px-2 py-1 rounded text-sm mb-2 shadow-sm">
+            Trend Score: {top.trend_score.toFixed(2)}
           </div>
 
-          <div className="mt-2 text-xs text-gray-600 flex gap-4">
-            <span>👁 {top.view_count}</span>
-            <span>🛒 {top.cart_count}</span>
-            <span>💳 {top.purchase_count}</span>
+          <div className="text-xs text-gray-600 flex gap-4 font-medium mt-1">
+            <span className="bg-white px-2 py-1 rounded">👁 {top.view_count} Views</span>
+            <span className="bg-white px-2 py-1 rounded">🛒 {top.cart_count} Carts</span>
+            <span className="bg-white px-2 py-1 rounded">💳 {top.purchase_count} Sold</span>
           </div>
         </div>
       )}
@@ -67,7 +76,8 @@ export default function Trending() {
             <div className="flex justify-between items-start">
               <div>
                 <div className="font-medium text-gray-800">
-                  #{index + 1} {p.product_name}
+                  <span className="text-gray-400 mr-1">#{index + 2}</span> 
+                  {p.product_name}
                 </div>
 
                 <div className="text-xs text-gray-500">
@@ -90,7 +100,7 @@ export default function Trending() {
 
         {data.products.length === 0 && (
           <div className="text-sm text-gray-500">
-            No trending products available.
+            Waiting for real-time user events...
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@
 # INPUT (MinIO): s3a://datalake/processed/
 #       - order_items.csv
 #       - products.csv
-# OUTPUT (Cassandra): ecommerce.product_complementary
+# OUTPUT (MongoDB): ecommerce.product_complementary
 
 # 1. IMPORT THƯ VIỆN
 
@@ -12,7 +12,7 @@ from pyspark.sql.functions import (
     collect_set,
     size,
     lit,
-    current_timestamp,
+    unix_timestamp,
     when,
     round
 )
@@ -30,22 +30,21 @@ import sys
 INPUT_PATH = "s3a://datalake/processed/"
 
 MINIO_CONF = {
-    "endpoint": "minio:9000",
+    "endpoint": "http://minio-service:9000",
     "access_key": "minioadmin",
     "secret_key": "minioadmin",
 }
 
-CASSANDRA_CONF = {
-    "host": "cassandra",
-    "keyspace": "ecommerce",
-    "table": "product_complementary"
+MONGODB_CONF = {
+    "uri": "mongodb://mongodb-service.default.svc.cluster.local:27017/",
+    "database": "ecommerce",
+    "collection": "product_complementary"
 }
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("product_complementary.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -55,16 +54,15 @@ logger = logging.getLogger(__name__)
 # 3. CREATE SPARK SESSION
 def create_spark():
 
+    #mongo_uri = f"{MONGODB_CONF['uri']}/{MONGODB_CONF['database']}.{MONGODB_CONF['collection']}"
     return SparkSession.builder \
         .appName("ProductComplementaryJob") \
-        .master("spark://spark-master:7077") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
         .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
         .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
 
@@ -82,7 +80,9 @@ def build_product_complementary(order_items, products):
     # lọc giỏ hàng >= 2 sản phẩm 
     baskets_df = baskets_df.filter(size(col("items")) > 1)
 
-    logger.info(f"Total baskets: {baskets_df.count()}")
+    # Tối ưu: Cache lại baskets_df vì nó được dùng cho cả Train FP-growth và hàm .count() bên dưới
+    baskets_df.cache()
+    total_baskets = baskets_df.count()
 
     # 4.2 FP-GROWTH TRAINING (SPARK NATIVE)
     fp = FPGrowth(
@@ -92,17 +92,13 @@ def build_product_complementary(order_items, products):
     )
 
     model = fp.fit(baskets_df)
-
-    freq_itemsets = model.freqItemsets
     rules = model.associationRules
 
     logger.info("FP-Growth training completed")
 
     # 4.3 FILTER 1-1 RULES (A -> B)
-
     rules_1_1 = rules.filter(
-        (size(col("antecedent")) == 1) &
-        (size(col("consequent")) == 1)
+        (size(col("antecedent")) == 1) & (size(col("consequent")) == 1)
         # 2 cột này được sinh sẵn ở  rules = model.associationRules
         # antecedent nghĩa là vế trái A trong luật A->B (mua A thì mua kèm B)
         # consequent nghĩa là vế phải B
@@ -117,22 +113,18 @@ def build_product_complementary(order_items, products):
     prod_category = products.select("product_id", "category")
 
     rules_1_1 = rules_1_1.join(
-        prod_category.withColumnRenamed("product_id", "product_id_1")
-                     .withColumnRenamed("category", "cat_1"),
+        prod_category.withColumnRenamed("product_id", "product_id_1").withColumnRenamed("category", "cat_1"),
         on="product_id_1",
         how="left"
     )
 
     rules_1_1 = rules_1_1.join(
-        prod_category.withColumnRenamed("product_id", "product_id_2")
-                     .withColumnRenamed("category", "cat_2"),
+        prod_category.withColumnRenamed("product_id", "product_id_2").withColumnRenamed("category", "cat_2"),
         on="product_id_2",
         how="left"
     )
 
     # 4.5 LOGIC METRICS 
-    total_baskets = baskets_df.count()
-
     rules_1_1 = rules_1_1.withColumn(
         "relationship_type",
         lit("co_purchase")
@@ -158,27 +150,22 @@ def build_product_complementary(order_items, products):
     rules_1_1 = rules_1_1.withColumn(
         "complementary_score",
         round(
-            (col("confidence") * 0.7) +
-            ((col("lift") / 10) * 0.3),
-            2
+            (col("confidence") * 0.7) + ((col("lift") / 10) * 0.3), 2
         )
     )
 
-    rules_1_1 = rules_1_1.withColumn(
-        "computed_date",
-        lit(int(current_timestamp().timestamp() * 1000))
-    )
+    rules_1_1 = rules_1_1.withColumn("computed_date", unix_timestamp() * 1000)
 
     logger.info("Feature engineering completed")
+    baskets_df.unpersist()
 
     return rules_1_1
 
 
-# 5. SAVE TO CASSANDRA
+# 5. SAVE TO MONGODB 
+def save_to_mongodb(df):
 
-def save_to_cassandra(df):
-
-    logger.info("Saving to Cassandra...")
+    logger.info("Saving to mongoDB...")
 
     final_df = df.select(
         "product_id_1",
@@ -192,15 +179,14 @@ def save_to_cassandra(df):
     )
 
     final_df.write \
-        .format("org.apache.spark.sql.cassandra") \
+        .format("mongodb") \
         .mode("overwrite") \
-        .options(
-            table=CASSANDRA_CONF["table"],
-            keyspace=CASSANDRA_CONF["keyspace"]
-        ) \
+        .option("spark.mongodb.write.connection.uri", MONGODB_CONF["uri"]) \
+        .option("database", MONGODB_CONF["database"]) \
+        .option("collection", MONGODB_CONF["collection"]) \
         .save()
 
-    logger.info("Saved to Cassandra successfully")
+    logger.info("Saved to MongoDB successfully")
 
 
 # 6. PIPELINE RUN
@@ -231,16 +217,14 @@ def run_pipeline():
             INPUT_PATH + "products.csv"
         )
 
-        logger.info(f"order_items: {order_items.count()}")
-        logger.info(f"products: {products.count()}")
+        logger.info(f"order_items: ")
+        logger.info(f"products: ")
 
         # BUILD MODEL
         result_df = build_product_complementary(order_items, products)
 
-        logger.info(f"Final rules: {result_df.count()}")
-
         # SAVE
-        save_to_cassandra(result_df)
+        save_to_mongodb(result_df)
 
         duration = (datetime.now() - start_time).total_seconds()
 
@@ -248,7 +232,7 @@ def run_pipeline():
 
     except Exception as e:
         logger.error("PIPELINE FAILED")
-        logger.error(str(e))
+        logger.error(str(e), exc_info=True)
         raise
 
     finally:

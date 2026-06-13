@@ -1,5 +1,5 @@
 fastapi==0.115.0
 uvicorn==0.30.0
 redis==5.0.8
-kafka-python==2.0.2
-cassandra-driver==3.29.2
+confluent-kafka==2.14.2
+pymongo==4.17.0

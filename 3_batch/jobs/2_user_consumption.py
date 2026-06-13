@@ -4,7 +4,7 @@
 #       - orders.csv
 #       - order_items.csv
 #       - products.csv
-# OUTPUT (Cassandra): ecommerce.user_consumption_profile
+# OUTPUT (MONGODB): ecommerce.user_consumption_profile
 
 # 1 IMPORT thư viện
 # 1.1 SparkSession
@@ -14,8 +14,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
     mean,
-    sum,
-    count,
+    sum as spark_sum,
+    count as spark_count,
     row_number,
     to_timestamp,
     date_format,
@@ -39,16 +39,16 @@ INPUT_PATH = "s3a://datalake/processed/"
 
 # 2.2 MINIO CONFIG
 MINIO_CONF = {
-    "endpoint": "minio:9000",
+    "endpoint": "http://minio-service:9000",
     "access_key": "minioadmin",
     "secret_key": "minioadmin",
 }
 
-# 2.3 CASSANDRA CONFIG
-CASSANDRA_CONF = {
-    "host": "cassandra",
-    "keyspace": "ecommerce",
-    "table": "user_consumption_profile"
+# 2.3 MONGODB CONFIG
+MONGODB_CONF = {
+    "uri": "mongodb://mongodb-service.default.svc.cluster.local:27017/",
+    "database": "ecommerce",
+    "collection": "user_consumption_profile"
 }
 
 # 2.4 LOGGING CONFIG
@@ -56,7 +56,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("user_consumption_profile.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -65,17 +64,17 @@ logger = logging.getLogger(__name__)
 
 # 3 CREATE SPARK
 def create_spark():
+    # Khởi tạo URI kết nối tập trung cho MongoDB
+    #mongo_uri = f"{MONGODB_CONF['uri']}/{MONGODB_CONF['database']}.{MONGODB_CONF['collection']}"
 
     return SparkSession.builder \
         .appName("UserConsumptionProfileJob") \
-        .master("spark://spark-master:7077") \
         .config("spark.hadoop.fs.s3a.endpoint", MINIO_CONF["endpoint"]) \
         .config("spark.hadoop.fs.s3a.access.key", MINIO_CONF["access_key"]) \
         .config("spark.hadoop.fs.s3a.secret.key", MINIO_CONF["secret_key"]) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.cassandra.connection.host", CASSANDRA_CONF["host"]) \
         .getOrCreate()
 
 
@@ -89,7 +88,7 @@ def build_user_consumption_profile(users,orders,order_items,products):
     # 4.1 lấy ra completed_orders
     # trong bảng orders lọc bỏ hết chỉ giữ lại các dòng mà order_status = completed
     completed_orders = orders.filter(col("order_status") == "completed")
-    logger.info(f"4.1. Completed orders: {completed_orders.count()}")
+    logger.info(f"4.1. Filtered completed orders")
 
     # 4.2 AVG ORDER VALUE
     # trong bảng completed_orders tiếp tục nhóm các hàng theo user_id thành từng nhóm
@@ -112,7 +111,7 @@ def build_user_consumption_profile(users,orders,order_items,products):
     # B3: tổng tiền theo tháng
     # tạo bảng [user_id, year_month, monthly_spending]
     monthly_spending = completed_orders.groupBy("user_id","year_month").agg(
-        sum("total_amount").alias("monthly_spending")
+        spark_sum("total_amount").alias("monthly_spending")
     )
     logger.info("4.3. Monthly spending completed")
 
@@ -125,7 +124,7 @@ def build_user_consumption_profile(users,orders,order_items,products):
     # từ bảng monthly_speding ta đánh số hàng bằng latest_window trước đó định nghĩa
     # =>sau đó gọi filter để giữ lại những hàng rn = 1 (tháng gần nhất)
     # => sau đó loại cột rn và year_month => còn lại [user_id, monthly_spending] (của tháng gần nhất)
-    latest_monthly = monthly_spending.withColumn("rn",row_number().over(latest_window)
+    latest_monthly = monthly_spending.withColumn("rn", row_number().over(latest_window)
     ).filter(col("rn") == 1).drop("rn")
 
     logger.info("4.4. Latest monthly spending completed")
@@ -183,28 +182,13 @@ def build_user_consumption_profile(users,orders,order_items,products):
     final_output = users.select("user_id")
 
     # join avg_order_value
-    final_output = final_output.join(
-        avg_order_value,
-        on="user_id",
-        how="left"
-    )
+    final_output = final_output.join(avg_order_value, on="user_id", how="left")
 
     # join latest_monthly
-    final_output = final_output.join(
-        latest_monthly.select(
-            "user_id",
-            "monthly_spending"
-        ),
-        on="user_id",
-        how="left"
-    )
+    final_output = final_output.join(latest_monthly.select("user_id", "monthly_spending"), on="user_id", how="left")
 
     # join top_behavior
-    final_output = final_output.join(
-        top_behavior,
-        on="user_id",
-        how="left"
-    )
+    final_output = final_output.join(top_behavior, on="user_id", how="left")
 
     # 4.11 FILL NULL
     final_output = final_output.fillna({
@@ -217,10 +201,10 @@ def build_user_consumption_profile(users,orders,order_items,products):
     return final_output
 
 
-# 5 SAVE TO CASSANDRA
-def save_to_cassandra(df):
+# 5 SAVE TO MONGODB
+def save_to_mongodb(df):
 
-    logger.info("Saving to Cassandra...")
+    logger.info("Saving user consumption to MongoDB...")
 
     final_df = df.select(
         "user_id",
@@ -232,16 +216,16 @@ def save_to_cassandra(df):
         "product_prices_in_latest_month"
     )
 
+    # Sử dụng Mongo Connector để ghi dữ liệu đè xuống bộ lưu trữ Serving layer
     final_df.write \
-        .format("org.apache.spark.sql.cassandra") \
+        .format("mongodb") \
         .mode("overwrite") \
-        .options(
-            table=CASSANDRA_CONF["table"],
-            keyspace=CASSANDRA_CONF["keyspace"]
-        ) \
+        .option("spark.mongodb.write.connection.uri", MONGODB_CONF["uri"]) \
+        .option("spark.mongodb.write.database", MONGODB_CONF["database"]) \
+        .option("spark.mongodb.write.collection", MONGODB_CONF["collection"]) \
         .save()
 
-    logger.info("5. Saved to Cassandra successfully")
+    logger.info("5. Saved to MongoDB successfully")
 
 
 # 6 RUN PIPELINE
@@ -268,8 +252,6 @@ def run_pipeline():
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "users.csv")
 
-        logger.info(f"Users count: {users.count()}")
-
         # 6.3 LOAD ORDERS
         logger.info("Loading orders data...")
 
@@ -277,8 +259,6 @@ def run_pipeline():
             .option("header", True) \
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "orders.csv")
-
-        logger.info(f"Orders count: {orders.count()}")
 
         # 6.4 LOAD ORDER ITEMS
         logger.info("Loading order_items data...")
@@ -288,10 +268,6 @@ def run_pipeline():
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "order_items.csv")
 
-        logger.info(
-            f"Order items count: {order_items.count()}"
-        )
-
         # 6.5 LOAD PRODUCTS
         logger.info("Loading products data...")
 
@@ -300,24 +276,13 @@ def run_pipeline():
             .option("inferSchema", True) \
             .csv(INPUT_PATH + "products.csv")
 
-        logger.info(
-            f"Products count: {products.count()}"
-        )
-
         # 6.6 BUILD PROFILE
         final_output = build_user_consumption_profile(
-            users,
-            orders,
-            order_items,
-            products
+            users, orders,order_items, products
         )
 
-        logger.info(
-            f"Final rows: {final_output.count()}"
-        )
-
-        # 6.7 SAVE TO CASSANDRA
-        save_to_cassandra(final_output)
+        # 6.7 SAVE TO MONGODB
+        save_to_mongodb(final_output)
 
         # 6.8 SUCCESS
         duration = (datetime.now() - start_time).total_seconds()

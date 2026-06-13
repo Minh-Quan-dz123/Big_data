@@ -1,4 +1,1 @@
-pandas==2.3.0
 requests==2.32.4
-streamlit==1.47.0
-streamlit-autorefresh==1.0.1
