@@ -1,0 +1,65 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool             # Khai báo nhóm các node chạy kafka
+metadata:
+  name: kafka-pool
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  replicas: 1                   # Hệ thống mini chỉ cần 1 node chạy đơn lẻ
+  roles:                        # Node lai: Vừa làm nhiệm vụ điều khiển vừa chứa data
+    - controller                # Quản lý metadata thay ZooKeeper
+    - broker                    # Xử lý, lưu trữ tin nhắn
+  storage:
+    type: ephemeral             # Bộ nhớ tạm, phù hợp làm môi trường test cho nhẹ máy
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka                     # Khai báo Cluster chính
+metadata:
+  name: my-cluster
+  annotations:
+    strimzi.io/node-pools: enabled  # Kích hoạt tính năng chia pool node ở trên
+    strimzi.io/kraft: enabled       # Kích hoạt chế độ KRaft (Không dùng ZooKeeper)
+spec:
+  kafka:
+    version: 4.2.0              # Giữ nguyên phiên bản 4.2.0 theo yêu cầu
+
+    listeners:                  # ĐỊNH TUYẾN LẠI HỆ THỐNG CỔNG KẾT NỐI Ở ĐÂY
+      # Cổng 1: Cho nội bộ cụm K8s (Spark Streaming/Batch kết nối)
+      - name: plain
+        port: 9094              # Đẩy cổng nội bộ thành 9094
+        type: internal
+        tls: false
+      # Cổng 2: Cho máy Host Windows bên ngoài kết nối vào (FastAPI / Script giả lập)
+      - name: external
+        port: 9092              # Để ngoài Windows gọi trúng cổng mặc định 9092 cho đẹp
+        type: nodeport          # Mở cổng NodePort xuyên cụm K8s
+        tls: false
+        configuration:
+          bootstrap:
+            nodePort: 30092     # BẮT BUỘC: Khớp khít với containerPort: 30092 của file kind-config.yaml
+          brokers:              # BỔ SUNG: Ép Kafka trả về localhost cho client ngoài Windows
+            - broker: 0
+              advertisedHost: 127.0.0.1
+              advertisedPort: 9092
+
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+
+  entityOperator:               # Tự động hóa quản lý Topic và User nội bộ
+    topicOperator: {}
+    userOperator: {}
+---
+# TỰ ĐỘNG KHỞI TẠO LUÔN TOPIC CHO DỰ ÁN THƯƠNG MẠI ĐIỆN TỬ
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: user-activity-events    # Khớp chuẩn xác tên topic thu thập hành vi trong thiết kế của mày
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 3                 # Chia 3 partition để sau này Spark Streaming song song xử lý cho nhanh
+  replicas: 1

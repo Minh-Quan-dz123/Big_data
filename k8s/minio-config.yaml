@@ -1,62 +1,50 @@
-apiVersion: v1
-kind: Service             # Service = đường mạng
-metadata:
-  name: minio             # tên service
-spec:
-  type: NodePort
-  selector:
-    app: minio            # service sẽ chọn các pod có tên label
-  ports:                  # cổng Servicee
-    - name: api           # là tên định danh cổng backend (tự đặt)
-      port: 9000          # port trong service
-      targetPort: 9000    # chuyển request vào container port 9000
-      nodePort: 30090     # cổng ngoài máy http://<NodeIP>:30090
-    - name: console       # tên cổng khác là cổng UI
-      port: 9001          # tương tự
-      targetPort: 9001
-      nodePort: 30091
----
 apiVersion: apps/v1
-kind: StatefulSet         # StatefulSet = máy chạy dữ liệu
+kind: Deployment #StatefulSet = giữ dữ liệu khi pod chết
 metadata:
-  name: minio             
+  name: minio             # tên deployment     
 spec:
-  serviceName: minio      # gắn với service ở trên
-  replicas: 4             # tạo 4 pod
-  selector:               # quản lý các pod có lable là minio
+  replicas: 1             
+  selector:               # khai báo cho bộ lọc tìm kiếm
     matchLabels:
       app: minio
-  template:               # pod được tạo sẽ có lable là minio
+  template:               # template->metadata->labels = nhãn thật sự (Label) được dán lên con Pod khi nó được sinh ra
     metadata:
       labels:
-        app: minio
-    spec:
-      containers:         # cấu hình container trong pod
+        app: minio        # nhãn của pod này
+    spec:                 # trong pod này có cái container bên dưới
+      containers:         # nghĩa là trong 1 pod có thể nhiều container, do đó vẫn phải đặt tên định danh riêng
         - name: minio
-          image: minio/minio:4.0.0  #minio/minio:latest lấy từ dockerHub
-          args:                     # chạy lệnh minio server và các dạng ở dưới
-            - server
-            - http://minio-{0...3}.minio.default.svc.cluster.local/data 
-            # nghĩa là các node lần lượt tên minio-0/1/2/3 
-            # và /data là thư mục lưu data trong container
-            - --console-address     # mở UL console tại port 9001
-            - ":9001"
+          image: minio/minio:latest
+          args: ["server", "/data", "--console-address", ":9001"] # mày là server, có /data là nơi cất trữ liệu trong container của mày, mở thêm giao diện, ở port 9001
           env:                      # các biến môi trường, UI hay backend khác muốn truy cập đều cần
             - name: MINIO_ROOT_USER
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin"
-          ports:                    # khai báo nội bộ
-            - containerPort: 9000   # cổng backend của MinIO 
+          ports:                    # khai báo nội bộ trong container này
+            - containerPort: 9000   # cổng backend mặc định của MinIO 
             - containerPort: 9001   # mở UI console
-          volumeMounts:             # gắn storage vào container
-            - name: data
-              mountPath: /data      # /data là nơi MinIO lưu file
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"] # chỉ 1 node được ghi vào volume này
-        resources:
-          requests:
-            storage: 1Gi
+          resources:                # lượng tài nguyên mà pod yêu cầu thì nó mới chịu chạy
+            limits:
+              memory: "256Mi"
+            requests:
+              memory: "128Mi"
+          
+---
+apiVersion: v1
+kind: Service             # Service = đường mạng
+metadata:
+  name: minio-service             # tên service
+spec:
+  type: NodePort
+  selector:
+    app: minio            # service sẽ chọn các pod có tên label
+  ports:                  # cổng Service quản lý
+    - name: api           # là tên định danh cổng backend (tự đặt)
+      port: 9000          # port trong service
+      targetPort: 9000    # chuyển request vào container port 9000
+    - name: console       # tên cổng khác là cổng UI
+      port: 9001          # tương tự
+      targetPort: 9001
+      nodePort: 30091
+---

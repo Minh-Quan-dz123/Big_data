@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-batch-manual-pipeline 
+spec:
+  ttlSecondsAfterFinished: 100 # Tự động xóa sạch Pod sau khi chạy xong 100 giây để dọn rác RAM
+  backoffLimit: 0 # Nếu code PySpark lỗi, dừng luôn chứ không tự động restart lại Pod (tiết kiệm tài nguyên)
+  template:
+    spec:
+      volumes:
+        - name: job-source  # volume chứa jobs
+          hostPath:
+            path: /src/3_batch/jobs # Thư mục chứa code nằm trên Kind Node
+        - name: spark-ivy-cache # volume chứa các thư viện
+          hostPath:
+            path: /data/spark_cache # Thư mục trên Kind Node nối từ Windows
+        # TẠO THÊM KHU VỰC LƯU TRỮ THƯ VIỆN PYTHON TRÊN KIND NODE
+        - name: python-libs-cache
+          hostPath:
+            path: /data/python_libs # Thư mục này nằm trên Kind
+      containers:
+        - name: spark-batch
+          image: apache/spark:3.5.0
+          securityContext:
+            runAsUser: 0
+          env:
+            - name: MONGODB_URI
+              value: "mongodb://mongodb-service.default.svc.cluster.local:27017/ecommerce"
+            # KHAI BÁO BIẾN MÔI TRƯỜNG ĐỂ PYTHON NHẬN DIỆN THƯ MỤC THƯ VIỆN NGOÀI
+            - name: PYTHONPATH
+              value: "/opt/spark/python_libs"
+          command: ["/bin/bash", "-c"] # ý nghĩa: Bật Terminal lên, gõ sẵn chế độ chạy chuỗi lệnh, rồi đợi tôi đưa lệnh vào
+          args:                        # nội dung của câu lệnh
+            - |
+              echo "=== KIỂM TRA VÀ KHỞI TẠO THƯ VIỆN PYTHON ==="
+              # Lớp kiểm tra: Nếu chưa có thư mục numpy ở khu vực mount ngoài thì mới cài
+              if [ ! -d "/opt/spark/python_libs/numpy" ]; then
+                  echo "-> Không tìm thấy NumPy, tiến hành tải và cài đặt một lần duy nhất..."
+                  pip install --target=/opt/spark/python_libs numpy
+              else
+                  echo "-> NumPy đã có sẵn trong bộ nhớ đệm Volume, bỏ qua bước cài đặt!"
+              fi
+
+
+              # Khai báo tập trung các thư viện để tối ưu dòng lệnh
+              PACKAGES="org.apache.hadoop:hadoop-aws:3.3.4,org.mongodb.spark:mongo-spark-connector_2.12:10.3.0"
+              
+              echo "=== KHỞI CHẠY CHUỖI CÁC SPARK JOBS TUẦN TỰ ==="
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/1_user_segment_job.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/2_user_consumption.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/3_trending_products.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/4_product_similarity.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/5_product_complementary.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/6_user_recommendations.py
+          volumeMounts: # volumes = kho chứa ngoại vi , volumeMounts = đường thông tới kho chứa đó
+            - name: job-source      # gọi tới kho chứa tên là thế này
+              mountPath: /opt/spark/jobs  # gắn nó vào kho chứa này của container này (cái này là đặt bừa)
+            - name: spark-ivy-cache 
+              # 3. Đổi mountPath theo user root giống hệt file Streaming
+              mountPath: /root/.ivy2
+            - name: python-libs-cache
+              mountPath: /opt/spark/python_libs
+          resources:
+            limits:
+              memory: "1.5Gi" # RAM trần để gánh bộ nhớ đệm ML
+            requests:
+              memory: "1Gi"
+      restartPolicy: Never # Tuyệt đối không khởi động lại tiến trình bên trong Pod nếu có lỗi

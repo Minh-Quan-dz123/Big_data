@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:6.0
+          command: ["mongod", "--wiredTigerCacheSizeGB", "0.25", "--bind_ip_all"]
+          ports:
+            - containerPort: 27017 # cổng mongoDB nhận dữ liệu
+          resources:
+            limits:
+              memory: "1200Mi"
+              cpu: "700m"
+            requests:
+              memory: "800Mi"
+              cpu: "400m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+spec:
+  type: NodePort
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017       # port của Service trong cluster
+      targetPort: 27017 # chính là containerPort của Mongodb
+      nodePort: 30017   # Map ra ngoài máy host thành cổng 27017 thông qua Kind
+    
+    

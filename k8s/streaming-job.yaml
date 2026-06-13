@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-streaming-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-streaming
+  template:
+    metadata:
+      labels:
+        app: spark-streaming
+    spec:
+      volumes:
+        - name: streaming-source
+          hostPath:
+            path: /src/4_speed
+        - name: spark-ivy-cache 
+          hostPath:
+            path: /data/spark_cache
+
+      containers:
+        - name: spark-streaming
+          image: apache/spark:3.5.0
+          securityContext:
+            runAsUser: 0
+          env:
+            # Biến môi trường giúp code Python của bạn linh hoạt
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9094"
+            - name: MONGODB_URI
+              value: "mongodb://mongodb-service.default.svc.cluster.local:27017/ecommerce.user_events"
+            # #
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Tích hợp thêm connector cần thiết
+              PACKAGES="org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.mongodb.spark:mongo-spark-connector_2.12:10.3.0" 
+              
+              echo "=== KHỞI CHẠY PIPELINE THỐNG NHẤT ==="
+              
+              # Đường dẫn spark-submit chuẩn của bản Apache
+              /opt/spark/bin/spark-submit \
+                --master "local[2]" \
+                --driver-memory 1G \
+                --packages $PACKAGES \
+                /opt/spark/streaming/streaming-job.py
+          volumeMounts:
+            - name: streaming-source
+              mountPath: /opt/spark/streaming
+            - name: spark-ivy-cache 
+              mountPath: /root/.ivy2
+          resources:
+            limits:
+              memory: "1.5Gi" # Tăng nhẹ để gộp 2 job
+            requests:
+              memory: "800Mi"

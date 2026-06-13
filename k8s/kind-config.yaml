@@ -3,20 +3,15 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
     extraPortMappings:
-    - containerPort: 30080  # expose spark-master
-      hostPort: 30080
-    - containerPort: 30081  # expose airflow
-      hostPort: 30081
-    - containerPort: 30090  # expose minio API
-      hostPort: 30090
-    - containerPort: 30091  # expose minio UI
-      hostPort: 30091
-    - containerPort: 30092  # expose kafka
-      hostPort: 30092
-    - containerPort: 30042  # expose Cassandra
-      hostPort: 30042
-    - containerPort: 30070  # expose Serving app
-      hostPort: 30070
-  - role: worker
-  - role: worker
-  - role: worker
+    - containerPort: 30092 # Hứng từ NodePort Kafka 
+      hostPort: 9092       # Expose ra localhost:9092 ngoài Windows
+      protocol: TCP
+    - containerPort: 30017 # Hứng từ NodePort MongoDB  
+      hostPort: 27017      # cổng của host 
+      protocol: TCP
+    - containerPort: 30091 # Hứng từ Web UI MinIO console
+      hostPort: 9001      # cổng của host 
+      protocol: TCP
+    - containerPort: 30079 # Hứng từ Redis 
+      hostPort: 6379      # cổng của host 
+      protocol: TCP

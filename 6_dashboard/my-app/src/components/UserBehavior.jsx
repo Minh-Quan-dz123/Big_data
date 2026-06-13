@@ -15,13 +15,13 @@ export default function UserBehavior({ userId })
     setSending(true);
 
     try {
-      await sendEvent(
-        userId,
-        selected.product_id,
-        selected.product_name,
-        selected.category,
-        type
-      );
+      await sendEvent({
+        userId: userId,
+        productId: selected.product_id,
+        productName: selected.product_name,
+        category: selected.category,
+        eventType: type
+      });
     } finally {
       setSending(false);
     }
