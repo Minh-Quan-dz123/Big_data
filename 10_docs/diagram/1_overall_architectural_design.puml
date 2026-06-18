@@ -10,7 +10,6 @@ rectangle "Streaming Ingestion Layer" {
 }
 
 rectangle "Stream Processing (Speed Layer)" {
-  component "Spark Streaming Job\n(realtime-interest)" as spark1
   component "Spark Streaming Job\n(trending-products)" as spark2
 }
 
@@ -20,7 +19,7 @@ rectangle "Batch Processing Layer" {
 }
 
 rectangle "Storage Layer" {
-  database "Cassandra\n(Realtime + Batch Serving DB)" as cassandra
+  database "MongoDB\n(Realtime + Batch Serving DB)" as MongoDB
   database "Redis\n(Cache Layer)" as redis
   component "MinIO\n(Data Lake / Object Storage)" as minio
 }
@@ -33,20 +32,18 @@ rectangle "Serving Layer" {
 User_External_System --> api:HTTP 
 
 
-kafka --> spark1: topic {user_activity_events}
 kafka --> spark2: topic {user_activity_events}
 
-spark1 --> cassandra
-spark2 --> cassandra
+spark2 --> MongoDB
 
 
-sparkbatch --> cassandra: write data 
+sparkbatch --> MongoDB: write data 
 sparkbatch --> minio: read data 
 
 airflow --> sparkbatch: trigger job (schedule / DAG)
 
 api --> redis: get / set
-api --> cassandra: get
+api --> MongoDB: get
 api --> kafka: topic {user_activity_events}
 
 @enduml

@@ -228,7 +228,7 @@ def build_user_recommendation(data):
     top_trending = data.trending_products.orderBy(col("trend_score").desc()).limit(10).collect()
     top_trending_ids = [row["product_id"] for row in top_trending]
     
-    # Cách đúng để tạo cột List trong PySpark
+    #  tạo cột List trong PySpark
     trend_list_col = array([lit(pid) for pid in top_trending_ids])
 
     # 2. XỬ LÝ USER CONSUMPTION (Giữ lại tất cả User)
