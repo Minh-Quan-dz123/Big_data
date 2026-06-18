@@ -1,0 +1,66 @@
+@startuml
+skinparam linetype ortho
+skinparam nodesep 70
+skinparam ranksep 80
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+
+title Kiến trúc Triển khai Big Data E-Commerce (Bản Clean Code)
+
+' ================= VÙNG MÁY HOST WINDOWS =================
+node "Windows Host Machine" {
+    component "FastAPI Server\n(Client / Entry Point)" as FastAPI #White
+    
+    ' ================= CỤM K8S (KIND) =================
+    node "Kind Kubernetes Cluster" {
+        
+        ' ----------------- NAMESPACE: KAFKA -----------------
+        package "Namespace: kafka" {
+            component "Kafka Service\n<<NodePort: 30092>>\n<<ClusterIP: 9094>>" as Svc_Kafka #FFF9C4
+            database "Kafka Pod\n<<KRaft>>\n[ContainerPort: 9092, 9094]" as Pod_Kafka #FFF9C4
+            
+            Svc_Kafka -down-> Pod_Kafka : Trỏ vào TargetPort
+        }
+
+        ' ----------------- NAMESPACE: DEFAULT -----------------
+        package "Namespace: default" {
+            
+            package "Data Storage & Serving" {
+                component "MongoDB Service\n<<NodePort: 30017>>" as Svc_Mongo #E0F7FA
+                database "MongoDB Pod\n[ContainerPort: 27017]" as Pod_Mongo #E0F7FA
+                
+                component "MinIO Service\n<<NodePort: 30091 (UI)>>\n<<ClusterIP: 9000 (API)>>" as Svc_Minio #E8EAF6
+                database "MinIO Pod\n[ContainerPort: 9000, 9001]" as Pod_Minio #E8EAF6
+                
+                component "Redis Service\n<<NodePort: 30079>>" as Svc_Redis #FCE4EC
+                database "Redis Pod\n[ContainerPort: 6379]" as Pod_Redis #FCE4EC
+                
+                Svc_Mongo -down-> Pod_Mongo
+                Svc_Minio -down-> Pod_Minio
+                Svc_Redis -down-> Pod_Redis
+            }
+
+            package "Spark Processing Layer" {
+                component "Spark Streaming\n<<Deployment (r:1)>>" as Spark_Streaming #E8F5E9
+                component "Spark Batch\n<<Job (Sequential)>>" as Spark_Batch #E8F5E9
+            }
+        }
+    }
+}
+
+' ================= LUỒNG TỪ NGOÀI VÀO (HOST PORT MAPPING) =================
+' Dùng màu xanh đậm để nhấn mạnh đây là luồng xuyên thủng K8s từ bên ngoài
+FastAPI -[#blue,bold]-> Svc_Kafka : Bắn Sự kiện\n[HostPort: 9092]
+FastAPI -[#blue,bold]-> Svc_Mongo : Fetch Dữ liệu\n[HostPort: 27017]
+FastAPI -[#blue,bold]-> Svc_Redis : Session Cache\n[HostPort: 6379]
+
+' ================= LUỒNG XỬ LÝ NỘI BỘ (THUẦN K8S) =================
+' Spark Streaming
+Spark_Streaming -up-> Svc_Kafka : Đọc luồng Realtime\n[Port: 9094]
+Spark_Streaming -up-> Svc_Mongo : Ghi Trend_Score\n[Port: 27017]
+
+' Spark Batch
+Spark_Batch -up-> Svc_Minio : Đọc file CSV\n[Port: 9000]
+Spark_Batch -up-> Svc_Mongo : Ghi Recommend_Score\n[Port: 27017]
+
+@enduml

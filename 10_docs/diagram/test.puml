@@ -1,0 +1,65 @@
+@startuml
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 50
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam defaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 10
+
+title Các Thành Phần Khi Triển Khai Hệ Thống (Bản Tối Ưu Layout)
+
+node "Kubernetes Cluster (Kind)" as K8s #F8F9FA {
+
+    package "1. Cluster Setup (kind-config.yaml)" #E0E0E0 {
+        node "Control-plane" as CP
+        node "Worker Node" as WN
+        CP -[hidden]right-> WN
+    }
+
+    ' Dàn ngang Kafka và Airflow ở tầng 2
+    package "3. Streaming (kafka-config.yaml)" #FFF3E0 {
+        queue "Kafka (Strimzi, KRaft)\n[Topic: user-activity-events]" as Kafka
+    }
+    
+    package "2. Batch Pipeline (airflow.yaml)" #E3F2FD {
+        component "Airflow\n(Điều phối ETL & Batch)" as Airflow
+    }
+    Kafka -[hidden]right-> Airflow
+
+    package "5. Processing Layer" #FCE4EC {
+        component "Spark Streaming\n(Xử lý Real-time)" as SparkStream
+        component "Spark Batch\n(Batch jobs)" as SparkBatch
+        SparkStream -[hidden]right-> SparkBatch
+    }
+
+    package "4. Data Storage Layer" #E8F5E9 {
+        database "MinIO\n(Data lake)" as MinIO
+        database "Redis\n(Cache)" as Redis
+        database "Cassandra\n(Serving DB)" as Cassandra
+        note bottom of Cassandra: Init: init_cassandra.cql
+        
+        ' Ép 3 DB nằm ngang nhau
+        MinIO -[hidden]right-> Redis
+        Redis -[hidden]right-> Cassandra
+    }
+
+    package "6. Serving Layer (serving.yaml)" #F3E5F5 {
+        component "FastAPI Service" as FastAPI
+        note right of FastAPI: Expose API qua\nNodePort/ClusterIP
+    }
+
+    ' Ép thứ tự các tầng từ trên xuống dưới
+    "1. Cluster Setup (kind-config.yaml)" -[hidden]down-> Kafka
+    Kafka -[hidden]down-> "5. Processing Layer"
+    "5. Processing Layer" -[hidden]down-> "4. Data Storage Layer"
+    "4. Data Storage Layer" -[hidden]down-> "6. Serving Layer (serving.yaml)"
+}
+
+' Liên kết tương tác từ Serving gọi ngược lên DB/Kafka (mũi tên đậm màu, ép hướng lên)
+FastAPI =[#1565C0,bold]up=> Cassandra : Query
+FastAPI =[#1565C0,bold]up=> Redis : Cache Lookup
+FastAPI =[#1565C0,bold]up=> Kafka : Produce Event
+
+@enduml

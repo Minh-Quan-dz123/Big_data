@@ -481,7 +481,13 @@ db.user_recommendations_batch.stats()
 db.user_recommendations_batch.countDocuments() 
 
 # đọc 5 documents gần đây nhất
-db.user_recommendations_batch.sort({ timestamp: 1 }).limit(5) 
+db.user_recommendations_batch.find().sort({ timestamp: 1 }).limit(5) 
+
+# Lấy 10 user nhóm "Frequent Shoppers",...
+db.user_recommendations_batch.find({ segment_name: "Frequent Shoppers" }).limit(10)
+db.user_recommendations_batch.find({ segment_name: "Risky Frequent Buyers" }).limit(10)
+db.user_recommendations_batch.find({ segment_name: "Low Frequency" }).limit(10)
+db.user_recommendations_batch.find({ segment_name: "Bad Customer" }).limit(10)
 ```
 
 
@@ -576,7 +582,25 @@ kubectl logs <pod-name>
 ```bash
 # ví dụ
 kubectl delete deployment spark-streaming-pipeline
+```
+
+### Tắt Docker
+```bash
+docker desktop stop
+```
 ---
+# 🚨 8 Khi Kubectl ma tắt và mở lại và lỗi kết nối với host
+
+```bash
+# khởi động cluster
+docker start bigdata-cluster-control-plane
+
+# kiểm tra có kind chưa
+docker ps
+
+# viết lệnh chui vào kubectl
+docker exec -it bigdata-cluster-control-plane bash
+# sau đó dùng các lệnh khác bình thường
 ```
 
 ## 🌐 Danh sách phân phối cổng dịch vụ công khai (Exposed Services)

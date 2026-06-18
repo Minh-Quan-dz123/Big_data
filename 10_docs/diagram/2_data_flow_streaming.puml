@@ -1,0 +1,40 @@
+@startuml
+!theme plain
+skinparam roundcorner 10
+skinparam maxmessagesize 150
+skinparam componentStyle rectangle
+
+title Sơ đồ Luồng Dữ liệu: Kafka -> Spark -> MongoDB
+
+' === CÁC THÀNH PHẦN (COMPONENTS) ===
+
+queue "Kafka Cluster\n(Broker: port 9094)" as kafka_cluster #LightCoral {
+    queue "Topic: user-activity-events" as kafka_topic
+}
+
+node "Apache Spark Streaming" as spark #LightYellow {
+    component "1. Data Parsing\n(Parse JSON từ cột 'value',\nÉp kiểu Timestamp)" as step1
+    component "2. Sliding Window Aggregation\n(Window: 5 phút, Trượt: 1 phút\nGroupBy: user_id, product_id...)" as step2
+    component "3. Weighted Trend Scoring\n(trend_score = view*0.2 + cart*0.5 + purchase*1.0)" as step3
+    
+    step1 -> step2 : Dữ liệu thô đã chuẩn hóa
+    step2 -> step3 : Dữ liệu gom nhóm theo Window
+}
+
+folder "Hệ thống File Cục bộ " as storage {
+    artifact "Checkpoint\n(/opt/spark/streaming/checkpoint-trending/)" as checkpoint
+}
+
+database "MongoDB" as mongo #LightGreen {
+    collections "trending_products_realtime\n(Database: ecommerce)" as collection
+}
+
+' === CÁC ĐƯỜNG DẪN LUỒNG DỮ LIỆU (RELATIONSHIPS) ===
+
+kafka_topic ==> step1 : spark.readStream\n(Subscribe topic liên tục)
+
+step3 ..> checkpoint : Lưu trạng thái\n(Phục hồi khi có lỗi)
+
+step3 ===> collection : writeStream.foreachBatch\n(Trigger: 30 giây)\nThao tác: Upsert\nKhóa chính: user_id, product_id
+
+@enduml

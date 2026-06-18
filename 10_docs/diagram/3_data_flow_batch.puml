@@ -1,0 +1,89 @@
+@startuml
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 60
+skinparam theme plain
+skinparam packageStyle rectangle
+skinparam componentStyle uml2
+
+title Quy trinh Xu ly Batch Job (Toi Uu Layout & Routing)
+
+' ================= THANH PHAN LUU TRU =================
+node "MinIO Storage (Data Lake)" #E8EAF6 {
+    database "Tap du lieu tho CSV" as MinIO_Raw
+}
+
+' ================= CHUOI BATCH JOBS =================
+node "Apache Spark Engine (Batch Core)" #E8F5E9 {
+
+    package "Phase 1: Xu ly Song Song (Parallel Phase)" {
+        
+        package "Job 1: Segment" as J1 #FFF3E0 {
+            component "K-Means"
+        }
+        package "Job 2: Consump" as J2 #FFF3E0 {
+            component "Thong ke"
+        }
+        package "Job 3: Trending" as J3 #FFF3E0 {
+            component "Xu huong"
+        }
+        package "Job 4: Similarity" as J4 #FFF3E0 {
+            component "Content-based"
+        }
+        package "Job 5: Complement" as J5 #FFF3E0 {
+            component "FP-Growth"
+        }
+        
+        ' Ep 5 Job xep hang ngang
+        J1 -[hidden]right-> J2
+        J2 -[hidden]right-> J3
+        J3 -[hidden]right-> J4
+        J4 -[hidden]right-> J5
+    }
+
+    ' Diem neo dong bo
+    cloud "Barrier / Wait\n(Cho 5 Job)" as SyncPoint #FFCCBC
+
+    package "Phase 2: Tong hop" {
+        package "Job 6: Recommendation" as J6 #FFF3E0 {
+            component "Hybrid"
+        }
+    }
+}
+
+' ================= BANG MONGODB =================
+database "MongoDB (Serving Layer)" as DB #E0F7FA
+
+' ================= LUONG THUC THI & GIAO TIEP =================
+
+' 1. Luong du lieu vao (Ep di xuong - chi ghi label o J1)
+MinIO_Raw -down.> J1 : Read
+MinIO_Raw -down.> J2 
+MinIO_Raw -down.> J3 
+MinIO_Raw -down.> J4 
+MinIO_Raw -down.> J5 
+
+' 2. Luong dieu khien thuc thi (Trigger xep xuong Barrier)
+J1 -[#red,bold]down-> SyncPoint
+J2 -[#red,bold]down-> SyncPoint
+J3 -[#red,bold]down-> SyncPoint
+J4 -[#red,bold]down-> SyncPoint
+J5 -[#red,bold]down-> SyncPoint
+
+' 3. Ghi ket qua Phase 1 xuong MongoDB (Ep xuong)
+J1 -down.> DB : Write
+J2 -down.> DB 
+J3 -down.> DB 
+J4 -down.> DB 
+J5 -down.> DB 
+
+' 4. Barrier kich hoat Job 6 (Ep xuong)
+SyncPoint -[#red,bold]down-> J6 : Trigger Job 6
+
+' 5. Job 6 load du lieu tu Mongo vao de tinh Hybrid (Ep xuong do DB nam tren J6)
+DB -down.> J6 : Load
+
+' 6. Ghi ket qua chot ha cua Job 6 (Ep mui ten chong nguoc len hoac re ngang)
+J6 -[#blue,bold]up-> DB: Write Final
+
+@enduml

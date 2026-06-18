@@ -62,7 +62,7 @@ def run_realtime_trend_pipeline():
         .select("data.*") \
         .withColumn("event_timestamp", (col("event_timestamp") / 1000).cast("timestamp"))
 
-    # ---> LUỒNG DEBUG 1: XUẤT RAW DATA TỪ KAFKA RA CONSOLE
+    # LUỒNG DEBUG 1: XUẤT RAW DATA TỪ KAFKA RA CONSOLE
     debug_raw_query = parsed_stream.writeStream \
         .outputMode("append") \
         .format("console") \
@@ -99,7 +99,7 @@ def run_realtime_trend_pipeline():
             "trend_score", "computed_time"
         )
 
-    # ---> LUỒNG CHÍNH 2: GHI VÀO MONGODB
+    # GHI VÀO MONGODB
     print("[INFO] Bắt đầu luồng ghi MongoDB...")
     query = trending_realtime.writeStream \
         .foreachBatch(write_to_mongo) \

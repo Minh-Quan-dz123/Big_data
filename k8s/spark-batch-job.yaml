@@ -37,21 +37,29 @@ spec:
               if [ ! -d "/opt/spark/python_libs/numpy" ]; then
                   echo "-> Không tìm thấy NumPy, tiến hành tải và cài đặt một lần duy nhất..."
                   pip install --target=/opt/spark/python_libs numpy
+              fi
+              echo "=== KIỂM TRA TÌNH TRẠNG CACHE ĐỂ CHỌN CHẾ ĐỘ CHẠY ==="
+
+              # Kiểm tra xem file mongodb-driver-sync đã có trong thư mục hay chưa
+              if ls /root/.ivy2/jars/*mongodb-driver-sync*.jar 1> /dev/null 2>&1; then
+                  echo "-> [CHẾ ĐỘ OFFLINE]: Đã có sẵn thư viện. Khóa mạng, nạp từ ổ cứng..."
+                  OFFLINE_JARS=$(ls -1 /root/.ivy2/jars/*.jar | paste -sd "," -)
+                  SPARK_ARGS="--jars $OFFLINE_JARS"
               else
-                  echo "-> NumPy đã có sẵn trong bộ nhớ đệm Volume, bỏ qua bước cài đặt!"
+                  echo "-> [CHẾ ĐỘ ONLINE]: Cache trống. Bắt buộc dùng mạng để tải lần đầu..."
+                  PACKAGES="org.apache.hadoop:hadoop-aws:3.3.4,org.mongodb.spark:mongo-spark-connector_2.12:10.3.0,org.mongodb:mongodb-driver-sync:4.8.2"
+                  SPARK_ARGS="--packages $PACKAGES"
               fi
 
-
-              # Khai báo tập trung các thư viện để tối ưu dòng lệnh
-              PACKAGES="org.apache.hadoop:hadoop-aws:3.3.4,org.mongodb.spark:mongo-spark-connector_2.12:10.3.0"
               
               echo "=== KHỞI CHẠY CHUỖI CÁC SPARK JOBS TUẦN TỰ ==="
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/1_user_segment_job.py && \
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/2_user_consumption.py && \
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/3_trending_products.py && \
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/4_product_similarity.py && \
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/5_product_complementary.py && \
-              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m --packages $PACKAGES /opt/spark/jobs/6_user_recommendations.py
+              # Truyền biến $SPARK_ARGS, hệ thống sẽ tự động quyết định dùng --jars hay --packages
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/1_user_segment_job.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/2_user_consumption.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/3_trending_products.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/4_product_similarity.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/5_product_complementary.py && \
+              /opt/spark/bin/spark-submit --master "local[1]" --driver-memory 512m $SPARK_ARGS /opt/spark/jobs/6_user_recommendations.py
           volumeMounts: # volumes = kho chứa ngoại vi , volumeMounts = đường thông tới kho chứa đó
             - name: job-source      # gọi tới kho chứa tên là thế này
               mountPath: /opt/spark/jobs  # gắn nó vào kho chứa này của container này (cái này là đặt bừa)
